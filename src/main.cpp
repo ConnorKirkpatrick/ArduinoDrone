@@ -1,5 +1,5 @@
 #include <Arduino.h>
-
+#include <MedianFilterLib2.h>
 
 #define triggerPin 2
 #define echoPin 3
@@ -9,7 +9,9 @@ int distance;
 
 //5v to Vcc
 
-void getDistance();
+int getDistance();
+
+MedianFilter2<int> medianFilter2(5);
 
 void setup() {
     pinMode(triggerPin, OUTPUT);
@@ -18,11 +20,12 @@ void setup() {
 }
 
 void loop() {
-    getDistance();
-    delay(1000);
+    int median = medianFilter2.AddValue(getDistance());
+    Serial.println(median);
+    Serial.println(medianFilter2.GetFiltered());
 }
 
-void getDistance(){
+int getDistance(){
     //get the system ready
     digitalWrite(triggerPin, LOW);
     delayMicroseconds(5);
@@ -35,9 +38,7 @@ void getDistance(){
     //calculate distance by the delay
     distance = duration * 0.034 / 2;
 
-    Serial.print("Distance = ");
-    Serial.print(distance);
-    Serial.println(" cm");
+    return distance;
 }
 
 //TODO: query x times per second, remove outliers, take average
