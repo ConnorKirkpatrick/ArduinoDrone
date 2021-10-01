@@ -1,30 +1,42 @@
 #include <Arduino.h>
-#include <pt.h>
+#include <protothreads.h>
 
 static struct pt pt1;
+static struct pt pt2;
 
-static int protothreadBlinkLED1(struct pt *pt);
+static int ProtoThread1(struct pt *pt);
+static int ProtoThread2(struct pt *pt);
 
 void setup() {
+    Serial.begin(9600);
+    Serial.println("Starting");
     pinMode(LED_BUILTIN, OUTPUT);
     PT_INIT(&pt1);
+    PT_INIT(&pt2);
 }
 
 void loop() {
-    protothreadBlinkLED1(&pt1);
+    PT_SCHEDULE(ProtoThread1(&pt1));
+    PT_SCHEDULE(ProtoThread2(&pt2));
 }
 
-static int protothreadBlinkLED1(struct pt *pt)
+static int ProtoThread1(struct pt *pt)
 {
     static unsigned long lastTimeBlink = 0;
     PT_BEGIN(pt);
     while(1) {
-        lastTimeBlink = millis();
-        PT_WAIT_UNTIL(pt, millis() - lastTimeBlink > 1000);
-        digitalWrite(LED_BUILTIN, HIGH);
-        lastTimeBlink = millis();
-        PT_WAIT_UNTIL(pt, millis() - lastTimeBlink > 1000);
-        digitalWrite(LED_BUILTIN, LOW);
+        Serial.println("Printing every 1 second");
+        PT_SLEEP(pt,1000)
+    }
+    PT_END(pt);
+}
+static int ProtoThread2(struct pt *pt)
+{
+    static unsigned long lastTimeBlink = 0;
+    PT_BEGIN(pt);
+    while(1) {
+        Serial.println("Printing every 3 seconds");
+        PT_SLEEP(pt,3000)
     }
     PT_END(pt);
 }
