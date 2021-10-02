@@ -2,8 +2,10 @@
 #include <Wire.h>
 #include <HMC5883L_Simple.h>
 
+//GY-271
 //Vcc 5v
 //ignore DRDY, is the interrupt for new data, read as input to trigger a read function
+//Use I2C connectors
 
 HMC5883L_Simple Compass;
 
