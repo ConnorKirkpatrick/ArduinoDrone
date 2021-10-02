@@ -3,10 +3,12 @@
 #include <SPI.h>
 #include <Adafruit_BMP280.h>
 
+//connect via I2C ports
+//VCC 5v
 
 Adafruit_BMP280 bmp;
 
-void altimeter();
+[[noreturn]] void altimeter();
 
 void setup() {
     altimeter();
@@ -20,7 +22,7 @@ void loop() {
     delay(1000);
 }
 
-void altimeter(){
+[[noreturn]] void altimeter(){
     Serial.begin(9600);
     while(!bmp.begin(0x76)){
         Serial.println(F("Could not find a valid BMP280 sensor, check wiring or "
@@ -30,15 +32,15 @@ void altimeter(){
     Serial.println("Good Connection");
 
     while(true){
-        Serial.print(F("Temperature = "));
+        Serial.print("Temperature = ");
         Serial.print(bmp.readTemperature());
         Serial.println(" *C");
 
-        Serial.print(F("Pressure = "));
+        Serial.print("Pressure = ");
         Serial.print(bmp.readPressure());
         Serial.println(" Pa");
 
-        Serial.print(F("Approx altitude = "));
+        Serial.print("Approx altitude = ");
         Serial.print(bmp.readAltitude(1013.25)); /* Adjusted to local forecast! */
         Serial.println(" m");
 
