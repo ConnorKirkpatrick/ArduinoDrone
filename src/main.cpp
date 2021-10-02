@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <Adafruit_BMP280.h>
 
+//BME/P-280
 //connect via I2C ports
 //VCC 5v
 
