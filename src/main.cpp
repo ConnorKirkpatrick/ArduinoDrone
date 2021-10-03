@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <HMC5883L_Simple.h>
+#include <Ewma.h>
 
 //GY-271
 //Vcc 5v
@@ -8,6 +9,7 @@
 //Use I2C connectors
 
 HMC5883L_Simple Compass;
+Ewma headingFilter(0.25);
 
 void setup() {
     Serial.begin(9600);
@@ -30,9 +32,14 @@ void setup() {
 }
 
 void loop() {
-    float heading = Compass.GetHeadingDegrees();
-
-    Serial.print("Heading: \t");
-    Serial.println( heading );
-    delay(1000);
+    double heading = Compass.GetHeadingDegrees();
+    int filteredHeading = headingFilter.filter(heading);
+    Serial.print("Raw: ");
+    Serial.println(heading);
+    Serial.print("Filtered: ");
+    Serial.println(filteredHeading);
+    Serial.println("\n");
+    delay(100);
 }
+
+//TODO: tilt compensation with the gyroscope
