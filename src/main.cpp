@@ -1,13 +1,18 @@
 #include <Arduino.h>
 #include <protothreads.h>
+#include <SoftwareSerial.h>
+#include <TinyGPSPlus.h>
 
 static struct pt pt1;
 static struct pt pt2;
+static struct pt gpsThread;
 
 static int ProtoThread1(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
-#include <SoftwareSerial.h>
-#include <TinyGPSPlus.h>
+static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
+
+
+
 
 //Vcc 5v
 //use TX and RX rather than I2C
@@ -15,7 +20,7 @@ static int ProtoThread2(struct pt *pt);
 
 float coords[6];
 
-SoftwareSerial serial_connection(10, 11); //RX=pin 10, TX=pin 11
+SoftwareSerial GPS_Connection(10, 11); //RX=pin 10, TX=pin 11
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 
 void getCoords(float array[]);
@@ -23,13 +28,21 @@ void getCoords(float array[]);
 void setup()
 {
     Serial.begin(9600);//This opens up communications to the Serial monitor in the Arduino IDE
-    serial_connection.begin(9600);//This opens up communications to the GPS
+    GPS_Connection.begin(9600);//This opens up communications to the GPS
     Serial.println("GPS Start");//Just show to the monitor that the sketch has started
+    Serial.println("Starting");
+    PT_INIT(&pt1);
+    PT_INIT(&pt2);
+
 }
 
 void loop()
 {
-    //query GPS
+    PT_SCHEDULE(ProtoThread1(&pt1));
+    PT_SCHEDULE(ProtoThread2(&pt2));
+    PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
+
+/*    //query GPS
     getCoords(coords);
     //if there is no satellites, no valid fix can be made thus retry
     while(coords[0] == 0){
@@ -47,22 +60,15 @@ void loop()
     Serial.println(coords[4]);
     Serial.print("altitude(m): ");
     Serial.println(coords[5]);
-    Serial.println("\n\n\n");
-    delay(10000);
+    Serial.println("\n\n\n");*/
+
 }
 
-void setup() {
-    Serial.begin(9600);
-    Serial.println("Starting");
-    pinMode(LED_BUILTIN, OUTPUT);
-    PT_INIT(&pt1);
-    PT_INIT(&pt2);
-}
-void getCoords(float array[]){
-    while(!gps.location.isUpdated()){
-        while(serial_connection.available())//While there are characters to come from the GPS
+void getCoords(float array[]) {
+    while (!gps.location.isUpdated()) {
+        while (GPS_Connection.available())//While there are characters to come from the GPS
         {
-            gps.encode(serial_connection.read());//This feeds the serial NMEA data into the library one char at a time
+            gps.encode(GPS_Connection.read());//This feeds the serial NMEA data into the library one char at a time
         }
     }
     array[0] = gps.satellites.value();
@@ -91,19 +97,27 @@ void getCoords(float array[]){
         Serial.println(gps.altitude.feet());
         Serial.println("");
     }*/
-
-void loop() {
-    PT_SCHEDULE(ProtoThread1(&pt1));
-    PT_SCHEDULE(ProtoThread2(&pt2));
 }
+
 
 static int ProtoThread1(struct pt *pt)
 {
-    static unsigned long lastTimeBlink = 0;
     PT_BEGIN(pt);
     while(1) {
-        Serial.println("Printing every 1 second");
-        PT_SLEEP(pt,1000)
+        Serial.print("Sats: ");
+        Serial.println(coords[0],0);
+        Serial.print("Time: ");
+        Serial.println(coords[1],0);
+        Serial.print("LAT: ");
+        Serial.println(coords[2],6);
+        Serial.print("LNG: ");
+        Serial.println(coords[3],6);
+        Serial.print("Speed(m/s): ");
+        Serial.println(coords[4]);
+        Serial.print("altitude(m): ");
+        Serial.println(coords[5]);
+        Serial.println("\n\n\n");
+        PT_YIELD(pt);
     }
     PT_END(pt);
 }
@@ -116,6 +130,25 @@ static int ProtoThread2(struct pt *pt)
         PT_SLEEP(pt,3000)
     }
     PT_END(pt);
+}
+static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS){
+    PT_BEGIN(pt);
+    while(1) {
+        while (!gps.location.isUpdated()) {
+            while (GPS_Connection.available())//While there are characters to come from the GPS
+            {
+                gps.encode(GPS_Connection.read());//This feeds the serial NMEA data into the library one char at a time
+            }
+        }
+        array[0] = gps.satellites.value();
+        array[1] = gps.time.value();
+        array[2] = gps.location.lat();
+        array[3] = gps.location.lng();
+        array[4] = gps.speed.mps();
+        array[5] = gps.altitude.meters();
+        PT_SLEEP(pt,1000)
+    }
+    PT_END(pt)
 }
 
 
