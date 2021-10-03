@@ -18,7 +18,7 @@ void setup() {
 
 void loop() {
     Serial.println(bmp.getStatus());
-    //243 is a bad status->no gnd
+    //243 is a bad status->no gnd, no recovery
     //0 is also bad, need to re-init
     //0Ã is bad, no power, can return when power is restored
     //12,4 is good
