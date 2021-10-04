@@ -27,10 +27,10 @@ void getCoords(float array[]);
 
 void setup()
 {
+    Serial.println("SYSTEM INITIALISING");
     Serial.begin(9600);//This opens up communications to the Serial monitor in the Arduino IDE
     GPS_Connection.begin(9600);//This opens up communications to the GPS
-    Serial.println("GPS Start");//Just show to the monitor that the sketch has started
-    Serial.println("Starting");
+
     PT_INIT(&pt1);
     PT_INIT(&pt2);
 
@@ -38,6 +38,7 @@ void setup()
     while(coords[0] < 2){
         getCoords(coords);
     }
+    Serial.println("GPS STARTED");
 
     Serial.println("SYSTEM INITIALISED");
 
