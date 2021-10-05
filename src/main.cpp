@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-int pin = 13;
+int pin = 51;
 //988
 //2093
 int note = 	2000;
