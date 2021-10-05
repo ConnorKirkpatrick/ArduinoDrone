@@ -4,7 +4,7 @@
 #include <Ewma.h>
 
 //GY-271
-//Vcc 5v
+//Vcc 5/3.3v
 //ignore DRDY, is the interrupt for new data, read as input to trigger a read function
 //Use I2C connectors
 
