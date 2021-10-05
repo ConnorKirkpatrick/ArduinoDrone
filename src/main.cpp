@@ -10,7 +10,7 @@ static struct pt pt1;
 static struct pt pt2;
 static struct pt gpsThread;
 
-static int ProtoThread1(struct pt *pt);
+static int FMC(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
 static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
 
@@ -25,6 +25,8 @@ Adafruit_BMP280 bmp;
 SoftwareSerial GPS_Connection(10, 11); //RX=pin 10, TX=pin 11
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 float coords[6];
+
+int flightMode = 0;
 
 void altimeter();
 void getCoords(float array[]);
@@ -53,7 +55,7 @@ void setup()
 
 
 void loop() {
-    PT_SCHEDULE(ProtoThread1(&pt1));
+    PT_SCHEDULE(FMC(&pt1));
     PT_SCHEDULE(ProtoThread2(&pt2));
     PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
 }
@@ -73,12 +75,16 @@ void getCoords(float array[]) {
     array[5] = gps.altitude.meters();
 }
 
-static int ProtoThread1(struct pt *pt)
+static int FMC(struct pt *pt)
 {
     PT_BEGIN(pt);
     while(1) {
+        ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED
+        ///We will have a single variable take a value relating to each mode, and at the start of the loop the system will check the variable
+        ///For mode switches, We can simply halt the running protothread with the old mode and start the new protothread
+        ///NAV speed will be limited to 1.5ms, with a possible further mode for cautious travel near obstacles being limited to 0.5ms
 
-        PT_SLEEP(pt,1500)
+        PT_SLEEP(pt,100)
     }
     PT_END(pt)
 }
@@ -152,3 +158,8 @@ float getAltitude(){
     Serial.println();*/
     return bmp.readAltitude();
 }
+
+
+///LIGHTS
+///Nav lights do not blink, red and green
+///Anti-collision do blink, red or white
