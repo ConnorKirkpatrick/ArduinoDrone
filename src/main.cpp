@@ -1,16 +1,14 @@
 #include <Arduino.h>
 #include <MedianFilterLib2.h>
 
-#define triggerPin 2
-#define echoPin 3
+#define triggerPin 52
+#define echoPin 53
 
 long duration;
 int distance;
 
 //5v to Vcc
-
 int getDistance();
-
 MedianFilter2<int> medianFilter2(5);
 
 void setup() {
