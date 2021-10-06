@@ -79,10 +79,48 @@ static int FMC(struct pt *pt)
 {
     PT_BEGIN(pt);
     while(1) {
-        ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED
+        ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED, QLanded
         ///We will have a single variable take a value relating to each mode, and at the start of the loop the system will check the variable
         ///For mode switches, We can simply halt the running protothread with the old mode and start the new protothread
         ///NAV speed will be limited to 1.5ms, with a possible further mode for cautious travel near obstacles being limited to 0.5ms
+        ///Will have an mode array, contains a list of instructions to carry out sequentially. If empty, wait 60 seconds before performing return home
+        ///TRANSITIONS:
+        ///     Hover
+        ///         If landed, schedule take off, schedule hover
+        ///         If Navigating, complete navigate proto and start hover
+        ///         If hover, Do nothing
+        ///     Navigate To:
+        ///         Reads from an array of coordinates, inputs as current nav point, generate heading from GPS+compass and proceeds to nav point
+        ///         If landed, schedule take off, hover, navigate
+        ///         If Hover, schedule Navigate
+        ///         If Navigating, do nothing
+        ///     Land:
+        ///         Sets vertical speed to 20cm/s
+        ///         If hover, schedule land
+        ///         If Navigating, schedule hover, land
+        ///         If Landing/landed do nothing
+        ///     Landed:
+        ///         Only scheduled from landing
+        ///         Once vertical speed == 0 and the sensor range(adjusted) == 0
+        ///         Set motors to 0 (off), strobe lights, start audio beacon
+        ///     QLanded:
+        ///         Quiet landed, only active when in landed mode and some input (button or web server) is set
+        ///         Turns off audio beacon, possible stops lights flashing
+        /// FLIGHT CONTROL
+        ///                     1          2
+        ///                      \        /
+        ///                   3---        ---4
+        ///                      /        \
+        ///                     5          6
+        ///Motors operate as whole set or pairs
+        ///TO CLIMB/descend:
+        ///     All motors increase in RPM together till vertical speed limit is met, inverse to descend
+        /// Forward and backward movement
+        ///     Pairs of motors, 1+2 and 5+6 increase and decrease RPM inversely, to go forward, 1+2 drop by 2%, 5+6 increase by 2%
+        ///Rotation:
+        ///     ??? send help
+        ///     Work in pairs of motors, 1+6 and 2+5, decrease one pair and increase one pair to induce torque on the body
+
 
         PT_SLEEP(pt,100)
     }
