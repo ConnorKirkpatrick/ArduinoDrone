@@ -1,0 +1,11 @@
+{
+  "name": "ArduinoDrone",
+  "version": "1.0.0",
+  "dependencies": {
+    "express": "^4.17.1",
+    "socket.io": "^4.2.0"
+  },
+  "devDependencies": {
+    "pug": "^3.0.2"
+  }
+}

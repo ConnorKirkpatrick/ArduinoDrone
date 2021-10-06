@@ -1,0 +1,4 @@
+This web server is intended to be run off of a rasberry pi 2011
+It will host a local web server with a website allowing the user to broadcast data such as coordinates or view flight data
+this will only be available on short range connections. Possibly in future this will be changed to radio controlled, with
+the webserver being fed info through that downlonk rather than directly
