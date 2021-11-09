@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="static/webPages/mainPage/mainPage.css">
+    <link rel="icon" href="data:,">
+    <!-- <meta http-equiv="refresh" content="10">-->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let socket = io();
+    </script>
+</head>
+<body>
+    <h1>Drone Setup page</h1>
+    <h3 id="status">Status: landed</h3>
+    <p id="Speed">Speed: 0.0 m/s</p>
+    <p id="Height">Height: 0 m</p>
+    <p id="Pressure">Pressure: 1031 hpa</p>
+    <p id="currentPosition">Current coords: 000N 000E</p>
+    <p id="homePosition">Home coords: 000N 000E</p>
+    <p id="time">Current Time: </p><br>
+
+    <div class="wpListDiv">
+        <p>Waypoints</p>
+        <ul id="waypoints" class="wpList">
+            <li class="wpItem">1. 51.05.1N 39.23.212E <button class="removeButton" type="button" onclick=this.parentNode.parentNode.removeChild(this.parentNode)>Remove</button><br><br></li>
+        </ul>
+    </div>
+</body>
+
+<label for="newWP">New Waypoint:</label>
+<input id="newWP" type="text" name="newWP"><br><br>
+<button class="button1" id="newWPButton" type="button" onclick="">Set new waypoint</button><br><br>
+
+<label for="newHome">New Home:</label>
+<input id="newHome" type="text" name="newWP"><br><br>
+<button class="button1" id="newHomeButton" type="button" onclick="">Set new home</button><button class="button1" type="button" onclick="">Set new home from current pos</button><br><br>
+
+<label for="newPressure">New Ground Pressure:</label>
+<input id="newPressure" type="text" name="newWP"><br><br>
+<button class="button1" id="newPressureButton" type="button" onclick="">Set new pressure</button><br><br>
+
+<label for="newAltitude">New Operating Altitude:</label>
+<input id="newAltitude" type="text" name="newWP"><br><br>
+<button class="button1" id="newAltitudeButton" type="button" onclick="">Set New Operating Altitude</button><br><br>
+
+<div id="MapDiv" style="height:750px"></div>
+<script src="https://openlayers.org/en/v5.3.0/build/ol.js"></script>
+<script type="text/javascript" src="static/scripts/map.js"></script>
+<script type="text/javascript" src="static/scripts/socketInteractions/socketHandler.js"></script>
+<script type="text/javascript" src="static/scripts/mapInteractions/newMapCenter.js"></script>
+<script type="text/javascript" src="static/scripts/mapInteractions/addMarker.js"></script>
+<script type="text/javascript" src="static/scripts/mapInteractions/removeMarker.js"></script>
+

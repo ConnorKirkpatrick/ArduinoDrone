@@ -2,10 +2,13 @@
   "name": "ArduinoDrone",
   "version": "1.0.0",
   "dependencies": {
+    "bower": "^1.8.12",
     "express": "^4.17.1",
+    "ol": "^6.9.0",
     "socket.io": "^4.2.0"
   },
   "devDependencies": {
-    "pug": "^3.0.2"
+    "pug": "^3.0.2",
+    "serialport": "^9.2.4"
   }
 }

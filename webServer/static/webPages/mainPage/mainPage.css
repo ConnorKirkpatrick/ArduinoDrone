@@ -1,0 +1,42 @@
+html {
+    font-family: Helvetica, serif;
+    display: inline-block;
+    margin: 0px auto;
+    text-align: center;
+}
+
+body {
+    background-color: #7b8ba2;
+}
+p {
+    font-weight: bold;
+}
+
+.wpListDiv{
+    align: center;
+    margin: 0px auto;
+    max-width: 300px;
+
+}
+.wpList{
+    border-style: solid;
+    border-width: medium;
+    border-color: black;
+}
+.wpItem{
+    border-style: solid;
+    border-width: medium;
+    border-color: red;
+    background-color: orange;
+}
+.removeButton{
+    border-style: hidden;
+    font-weight: bolder;
+    background-color: red;
+}
+#map-container {
+    margin: 0;
+    height: 100%;
+    width: 100%;
+    font-family: sans-serif;
+}
