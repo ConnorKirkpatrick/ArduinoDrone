@@ -14,8 +14,7 @@ socket.on("newCenter", (data) => {
     setTimeout(function () {
         addMarker(-0.5864,51.2411, 2)
         console.log(markerArray[0].getId())
+
+        addLine(markerArray[0], markerArray[1])
     }, 5000)
-    setTimeout(function () {
-        removeMarker(1)
-    }, 4000)
 })
