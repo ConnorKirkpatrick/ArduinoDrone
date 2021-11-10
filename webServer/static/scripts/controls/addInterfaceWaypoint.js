@@ -26,4 +26,5 @@ function addInterfaceWaypoint(id, Long, Lat){
     newListItem.append(br)
     newListItem.append(br)
     list.append(newListItem)
+    sortList()
 }

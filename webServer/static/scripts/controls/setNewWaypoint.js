@@ -1,5 +1,5 @@
 function setNewWaypoint(){
-    let id = document.getElementById("newWPNumber").value
+    let id = parseInt(document.getElementById("newWPNumber").value)
     let coordinates = document.getElementById("newWP").value
     console.log(id, coordinates)
     //check the data is correct

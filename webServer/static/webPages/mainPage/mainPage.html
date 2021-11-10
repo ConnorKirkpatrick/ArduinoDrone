@@ -16,9 +16,6 @@
     <p id="Speed">Speed: 0.0 m/s</p>
     <p id="Height">Height: 0 m</p>
     <p id="Pressure">Pressure: 1031 hpa</p>
-    <p id="currentPosition">Current coords: 000N 000E</p>
-    <p id="homePosition">Home coords: 000N 000E</p>
-    <p id="time">Current Time: </p><br>
 
 
 </body>
@@ -40,12 +37,9 @@
 <div id="mapInterface">
     <div id="sidebar" class="float-left-area" style="height: 750px">
         <div class="inner-left">
-
-            Left content. Add your main body of content to this side.
             <div class="wpListDiv">
                 <p>Waypoints</p>
-                <ul id="waypoints" class="wpList">
-                    <li class="wpItem">1. 51.05.1N 39.23.212E <button class="removeButton" type="button" onclick=this.parentNode.parentNode.removeChild(this.parentNode)>Remove</button><br><br></li>
+                <ul id="waypoints" class="wpList", type="1">
                 </ul>
             </div>
             <label for="newWPNumber" >Waypoint Number:</label>
@@ -57,7 +51,11 @@
             <label for="newHome">New Home:</label>
             <input id="newHome" type="text" name="newWP"><br><br>
             <button class="button1" id="newHomeButton" type="button" onclick="homeFromInput()">Set new home</button><button class="button1" type="button" onclick="" disabled="true">Set new home from current pos</button><br><br>
-
+            <br>
+            <br>
+            <button class="button1" id="createFlight" type="button" onclick="createFlight()">Create Flight Plan</button>
+            <br>
+            <button class="button1" id="startFlight" type="button" onclick="" disabled="true">Start Flight</button>
         </div>
     </div>
 
@@ -86,7 +84,9 @@
 <script type="text/javascript" src="static/scripts/controls/toggleSideBar.js"></script>
 <script type="text/javascript" src="static/scripts/controls/setNewWaypoint.js"></script>
 <script type="text/javascript" src="static/scripts/controls/addInterfaceWaypoint.js"></script>
+<script type="text/javascript" src="static/scripts/controls/sortList.js"></script>
 <script type="text/javascript" src="static/scripts/controls/homeFromInput.js"></script>
+<script type="text/javascript" src="static/scripts/controls/createFlight.js"></script>
 
 
 
