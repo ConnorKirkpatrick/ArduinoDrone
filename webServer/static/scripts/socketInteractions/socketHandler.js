@@ -1,7 +1,7 @@
 /**
  * SocketEvent newCenter
  * socket event used to pass new coordinates to the newMapCenter function to recenter the map view
- * @data String, A string containing the latitude and Longitude in the form "Lat,Long"
+ * @data{Array}, A string containing the latitude and Longitude in the form "Lat,Long"
  */
 socket.on("newCenter", (data) => {
     let Long = parseFloat(data[1])

@@ -9,7 +9,6 @@ const SerialPort = require("serialport")
 const serialStart = require("../functions/serialStart")
 const serialWrite = require("../functions/serialWrite")
 const serialRead = require("../functions/serialRead")
-const mapObject = require("../functions/map")
 
 const express = require("express")
 app.use("/static", express.static(path.join(__dirname, "./static/")));
