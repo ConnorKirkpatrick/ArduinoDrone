@@ -24,11 +24,6 @@
 </body>
 
 
-
-<label for="newHome">New Home:</label>
-<input id="newHome" type="text" name="newWP"><br><br>
-<button class="button1" id="newHomeButton" type="button" onclick="">Set new home</button><button class="button1" type="button" onclick="">Set new home from current pos</button><br><br>
-
 <label for="newPressure">New Ground Pressure:</label>
 <input id="newPressure" type="text" name="newWP"><br><br>
 <button class="button1" id="newPressureButton" type="button" onclick="">Set new pressure</button><br><br>
@@ -59,6 +54,10 @@
             <input id="newWP" type="text" name="newWP"><br><br>
             <button class="button1" id="newWPButton" type="button" onclick="setNewWaypoint()">Set new waypoint</button><br><br>
 
+            <label for="newHome">New Home:</label>
+            <input id="newHome" type="text" name="newWP"><br><br>
+            <button class="button1" id="newHomeButton" type="button" onclick="homeFromInput()">Set new home</button><button class="button1" type="button" onclick="" disabled="true">Set new home from current pos</button><br><br>
+
         </div>
     </div>
 
@@ -72,6 +71,7 @@
 </div>
 <script>
     let sideBarToggle = 1
+    let home = NaN
 </script>
 <script src="https://openlayers.org/en/v5.3.0/build/ol.js"></script>
 <script type="text/javascript" src="static/scripts/map.js"></script>
@@ -86,6 +86,7 @@
 <script type="text/javascript" src="static/scripts/controls/toggleSideBar.js"></script>
 <script type="text/javascript" src="static/scripts/controls/setNewWaypoint.js"></script>
 <script type="text/javascript" src="static/scripts/controls/addInterfaceWaypoint.js"></script>
+<script type="text/javascript" src="static/scripts/controls/homeFromInput.js"></script>
 
 
 

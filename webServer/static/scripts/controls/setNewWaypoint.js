@@ -1,5 +1,5 @@
 function setNewWaypoint(){
-    let id =document.getElementById("newWPNumber").value
+    let id = document.getElementById("newWPNumber").value
     let coordinates = document.getElementById("newWP").value
     console.log(id, coordinates)
     //check the data is correct
@@ -34,4 +34,6 @@ function setNewWaypoint(){
     }
     //now add this to the user interface
     addInterfaceWaypoint(id, Long, Lat)
+    document.getElementById("newWPNumber").value = ""
+    document.getElementById("newWP").value = ""
 }
