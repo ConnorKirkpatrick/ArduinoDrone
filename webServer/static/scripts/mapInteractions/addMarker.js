@@ -27,4 +27,5 @@ function addMarker(Long, Lat, id){
     vectorSource.addFeature(marker)
     marker.setStyle(baseStyle)
     markerArray.push(marker)
+    markerArray.sort(function (a,b){return a.getId() - b.getId()})
 }
