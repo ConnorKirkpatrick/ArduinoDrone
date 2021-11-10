@@ -37,7 +37,7 @@ io.on("connect", socket =>{
     console.log("Connection made")
     setTimeout(function() {
         socket.emit("newCenter", [51.24111847282226, -0.5864529744688033])
-    },2000)
+    },500)
 
 })
 /*

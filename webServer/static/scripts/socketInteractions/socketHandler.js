@@ -17,10 +17,7 @@ socket.on("newCenter", (data) => {
 
         addLine(markerArray[0], markerArray[1])
         setTimeout(function (){
-            changeLineColour("1-2", '#ea6d6d')
-        },2000)
-        setTimeout(function (){
-            removeLine("1-2")
-        },5000)
-    }, 5000)
+            alterLineStyle("1-2",6, '#ea6d6d')
+        },1000)
+    }, 3000)
 })
