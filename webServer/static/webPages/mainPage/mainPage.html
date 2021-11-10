@@ -36,7 +36,7 @@
 <label for="newAltitude">New Operating Altitude:</label>
 <input id="newAltitude" type="text" name="newWP"><br><br>
 <button class="button1" id="newAltitudeButton" type="button" onclick="">Set New Operating Altitude</button><br><br>
-<button class="button1" id="test" type="button" onclick="test()" >Toggle Map Controls</button><br><br>
+<button class="button1" id="test" type="button" onclick="toggleSideBar()" >Toggle Map Controls</button><br><br>
 
 
 
@@ -70,6 +70,9 @@
 
 
 </div>
+<script>
+    let sideBarToggle = 1
+</script>
 <script src="https://openlayers.org/en/v5.3.0/build/ol.js"></script>
 <script type="text/javascript" src="static/scripts/map.js"></script>
 <script type="text/javascript" src="static/scripts/socketInteractions/socketHandler.js"></script>
@@ -80,24 +83,7 @@
 <script type="text/javascript" src="static/scripts/mapInteractions/removeLine.js"></script>
 <script type="text/javascript" src="static/scripts/mapInteractions/alterLineStyle.js"></script>
 <script type="text/javascript" src="static/scripts/mapInteractions/alterMarkerStyle.js"></script>
-<script>
-    let toggle = 1
-    function test(){
-        let maparea = document.getElementById("mapArea")
-        let dock = document.getElementById("sidebar")
-        if(toggle){
-            toggle = 0
-            dock.hidden = true
-            maparea.setAttribute("style", "width: 100%")
-        }
-        else{
-            toggle = 1
-            dock.hidden = false
-            maparea.setAttribute("style", "width: 70%")
-        }
+<script type="text/javascript" src="static/scripts/controls/toggleSideBar.js"></script>
 
-
-    }
-</script>
 
 
