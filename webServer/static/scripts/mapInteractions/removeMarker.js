@@ -6,7 +6,7 @@ function removeMarker(id){
     for(let i = 0; i < markerArray.length; i++){
         if(markerArray[i].getId() === id){
             vectorSource.removeFeature(markerArray[i])
-            markerArray.splice(i)
+            markerArray.splice(i,1)
             break
         }
     }

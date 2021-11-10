@@ -12,6 +12,7 @@ function homeFromInput(){
         addMarker(Long,Lat,0)
         alterMarkerStyle(0,10,'#3b245d')
         document.getElementById("newHome").value = ""
+        home = true
     }
 
 }

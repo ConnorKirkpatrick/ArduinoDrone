@@ -6,7 +6,7 @@ function removeLine(id){
     for(let i = 0; i < lineArray.length; i++){
         if(lineArray[i].getId() === id){
             vectorSource.removeFeature(lineArray[i])
-            lineArray.splice(i)
+            lineArray.splice(i,1)
             break
         }
     }

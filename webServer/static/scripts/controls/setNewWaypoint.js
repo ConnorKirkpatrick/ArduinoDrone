@@ -10,19 +10,26 @@ function setNewWaypoint(){
     else{
         let Lat = coordinates[0]
         let Long = coordinates[1]
-        //check the ID is not already in use
-        for(let i = 0; i < markerArray.length; i++){
-            if(markerArray[i].getId() === id){
-                alert("Waypoint Number Already In Use")
-                return
-            }
+        //check the ID
+        if(isNaN(id)){
+            alert("Ensure The ID Is A Valid Number (1-10)")
+            return
         }
-        //now create the waypoint
-        addMarker(Long,Lat,id)
-        //now add this to the user interface
-        addInterfaceWaypoint(id, Long, Lat)
-        document.getElementById("newWPNumber").value = ""
-        document.getElementById("newWP").value = ""
+        else {
+            //check the ID is not already in use
+            for (let i = 0; i < markerArray.length; i++) {
+                if (markerArray[i].getId() === id) {
+                    alert("Waypoint Number Already In Use")
+                    return
+                }
+            }
+            //now create the waypoint
+            addMarker(Long, Lat, id)
+            //now add this to the user interface
+            addInterfaceWaypoint(id, Long, Lat)
+            document.getElementById("newWPNumber").value = ""
+            document.getElementById("newWP").value = ""
+        }
     }
 
 }
