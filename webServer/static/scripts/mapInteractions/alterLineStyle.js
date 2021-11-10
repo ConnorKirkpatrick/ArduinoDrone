@@ -11,7 +11,6 @@ function alterLineStyle(id, width, newColour){
             color: newColour
         })
     })
-    console.log(typeof newColour)
     for(let i = 0; i < lineArray.length; i++){
         if(lineArray[i].getId() === id){
             lineArray[i].setStyle(newStyle)
