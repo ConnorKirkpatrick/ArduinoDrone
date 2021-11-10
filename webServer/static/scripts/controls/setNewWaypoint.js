@@ -28,6 +28,10 @@ function setNewWaypoint(){
     console.log("Good Data")
     //now create the waypoint
     addMarker(Long,Lat,id)
+    markerArray.sort(function (a,b){return a.getId() - b.getId()})
+    for(let i = 0; i < markerArray.length; i++) {
+        console.log(markerArray[i].getId())
+    }
     //now add this to the user interface
     addInterfaceWaypoint(id, Long, Lat)
 }
