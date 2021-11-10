@@ -22,5 +22,3 @@ function returnToPlanning(){
     document.getElementById("startFlight").disabled = true
     document.getElementById("returnToPlanning").disabled = true
 }
-
-//TODO check waypoint has a valid id
