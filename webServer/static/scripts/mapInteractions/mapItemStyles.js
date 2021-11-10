@@ -23,5 +23,15 @@ let baseHomeStyle = new ol.style.Style({
         width:0
     }),
 })
-let baseHomeSize = 10
+let baseMarkerSize = 10
+let baseHomeSize = 15
+let currentMarkerSize = 20
 
+let currentMarkerColour = '#ff0000'
+let oldMarkerColour = '#0235b4'
+let newMarkerColour = '#2eff00'
+
+let currentLineColour = '#9900ff'
+let baseLineColour ='#000000'
+let baseLineWidth = 3
+let currentLineWidth = 7

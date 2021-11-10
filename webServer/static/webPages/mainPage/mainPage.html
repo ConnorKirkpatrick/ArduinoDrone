@@ -56,7 +56,7 @@
             <button class="button1" id="createFlight" type="button" onclick="createFlight()">Create Flight Plan</button>
             <br>
             <br>
-            <button class="button1" id="startFlight" type="button" onclick="" disabled="true">Start Flight</button>
+            <button class="button1" id="startFlight" type="button" onclick="startFlight()" disabled="true">Start Flight</button>
             <br>
             <br>
             <button class="button1" id="returnToPlanning" type="button" onclick="returnToPlanning()" disabled="true">Return To Planning</button>
@@ -75,6 +75,10 @@
 <script>
     let sideBarToggle = 1
     let home = false
+    let visitedPoints = []
+    let toVisit = []
+    let visitedLines = []
+    let toVisitLines = []
 </script>
 <script src="https://openlayers.org/en/v5.3.0/build/ol.js"></script>
 <script type="text/javascript" src="static/scripts/map.js"></script>
@@ -96,6 +100,7 @@
 <script type="text/javascript" src="static/scripts/controls/homeFromInput.js"></script>
 <script type="text/javascript" src="static/scripts/controls/createFlight.js"></script>
 <script type="text/javascript" src="static/scripts/controls/returnToPlanning.js"></script>
+<script type="text/javascript" src="static/scripts/controls/startFlight.js"></script>
 
 
 
