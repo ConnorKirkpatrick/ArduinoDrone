@@ -1,3 +1,6 @@
+/**
+ * function used to hide and show the sidebar, expands and shrinks the map area in relation
+ */
 function toggleSideBar(){
     let mapArea = document.getElementById("mapArea")
     let dock = document.getElementById("sidebar")
