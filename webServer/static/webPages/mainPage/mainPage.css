@@ -40,3 +40,21 @@ p {
     width: 100%;
     font-family: sans-serif;
 }
+
+
+.float-left-area  {
+    width: 30%;
+    float: left;
+
+    background-color: grey;
+    outline: black solid 10px;
+    outline-offset: -10px;
+}
+.inner-left{
+    margin: 10px;
+}
+
+.float-right-area {
+    width: 70%;
+    float: left;
+}
