@@ -57,6 +57,7 @@ functionality:
     When we reach the currentwaypoint, pop it from toVisit into Visited, change to old colour
         change line to standard colour and size
     queue the next top item from both lists as the current waypoint/line
+
     Testing waypoints:
         Home: 51.24435086797461, -0.5858625658094214
         wp1: 51.24398128019178, -0.5952681896986041

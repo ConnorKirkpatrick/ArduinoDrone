@@ -21,7 +21,6 @@ function alterMarkerStyle(id, size, colour){
         if(markerArray[i].getId() == id){
             markerArray[i].getGeometry().setRadius(size)
             markerArray[i].setStyle(newStyle)
-            console.log("Done")
             break
         }
     }
