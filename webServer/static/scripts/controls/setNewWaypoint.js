@@ -28,5 +28,6 @@ function setNewWaypoint(){
     console.log("Good Data")
     //now create the waypoint
     addMarker(Long,Lat,id)
-
+    //now add this to the user interface
+    addInterfaceWaypoint(id, Long, Lat)
 }
