@@ -1,9 +1,10 @@
-#include <Arduino.h>
-#include <protothreads.h>
-#include <SoftwareSerial.h>
-#include <TinyGPSPlus.h>
-#include <Adafruit_BMP280.h>
-
+#include "../.pio/libdeps/due/Adafruit BusIO/Adafruit_BusIO_Register.h"
+#include "../.pio/libdeps/due/Adafruit BMP280 Library/Adafruit_BMP280.h"
+#include "../.pio/libdeps/due/Protothreads/src/protothreads.h"
+#include "../.pio/libdeps/due/Servo/src/Servo.h"
+#include "../lib/TinyGPSPLUS/src/TinyGPSPlus.h"
+#include "../lib/Adafruit_MPU6050/Adafruit_MPU6050.h"
+#include "C:/Users\conno\.platformio\packages\framework-arduino-sam\cores\arduino/Arduino.h"
 
 
 static struct pt pt1;
@@ -14,10 +15,33 @@ static int FMC(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
 static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
 
+//Define the ESC control pins
+
+#define ESC_L  7
+#define ESC_LR  6
+#define ESC_LF  5
+
+#define ESC_R  2
+#define ESC_RR  3
+#define ESC_RF  4
+
+//setup the servo objects for the motor
+
+Servo motor_L;
+Servo motor_LR;
+Servo motor_LF;
+Servo motor_R;
+Servo motor_RR;
+Servo motor_RF;
+
+
+
+
 //BME/P-280
 //connect via I2C ports
 //VCC 5v
 Adafruit_BMP280 bmp;
+
 
 //Vcc 5v
 //use TX and RX rather than I2C
@@ -26,14 +50,25 @@ SoftwareSerial GPS_Connection(10, 11); //RX=pin 10, TX=pin 11
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 float coords[6];
 
+//Motion processing unit, our gyroscope
+Adafruit_MPU6050 mpu;
+//adjustments for the MPU
+double adjust_x = -8.26;
+double adjust_y = -2.55;
+double adjust_z = 0;
+
+
 int flightMode = 0;
 
 void altimeter();
+void startGyro();
 void getCoords(float array[]);
+void idleAll();
+void writeAll(int speed);
 
 void setup()
 {
-    delay(5000);
+    delay(1000);
     Serial.begin(9600);
     Serial.println("SYSTEM INITIALISING");
 
@@ -41,13 +76,29 @@ void setup()
     PT_INIT(&pt1);
     PT_INIT(&pt2);
 
+    ///STARTUP CHECKLIST
+
+    //setup the motors, set to idle
+    motor_L.attach(ESC_L);
+    motor_LR.attach(ESC_LR);
+    motor_LF.attach(ESC_LF);
+
+    motor_R.attach(ESC_R);
+    motor_RR.attach(ESC_RR);
+    motor_RF.attach(ESC_RF);
+    idleAll();
+    Serial.println("MOTORS READY");
+    /*
+    //setup the GPS, check the data is good
     GPS_Connection.begin(9600);//This opens up communications to the GPS
-    //Startup checks
     while(coords[0] < 2){
         getCoords(coords);
     }
     Serial.println("GPS STARTED");
+     */
+    //Start the Altimeter, check its connected
     altimeter();
+    startGyro();
     Serial.println("SYSTEM INITIALISED");
 }
 
@@ -57,7 +108,10 @@ void setup()
 void loop() {
     PT_SCHEDULE(FMC(&pt1));
     PT_SCHEDULE(ProtoThread2(&pt2));
-    PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
+    //PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
+    motor_RF.writeMicroseconds(1050);
+    delay(1000);
+    idleAll();
 }
 
 void getCoords(float array[]) {
@@ -122,7 +176,7 @@ static int FMC(struct pt *pt)
         ///     Work in pairs of motors, 1+6 and 2+5, decrease one pair and increase one pair to induce torque on the body
 
 
-        PT_SLEEP(pt,100)
+        PT_SLEEP(pt,1000)
     }
     PT_END(pt)
 }
@@ -195,6 +249,34 @@ float getAltitude(){
 
     Serial.println();*/
     return bmp.readAltitude();
+}
+void idleAll(){
+   motor_L.writeMicroseconds(1000);
+   motor_LR.writeMicroseconds(1000);
+   motor_LF.writeMicroseconds(1000);
+   motor_R.writeMicroseconds(1000);
+   motor_RR.writeMicroseconds(1000);
+   motor_RF.writeMicroseconds(1000);
+}
+
+void writeAll(int speed){
+    motor_L.writeMicroseconds(speed);
+    motor_LR.writeMicroseconds(speed);
+    motor_LF.writeMicroseconds(speed);
+    motor_R.writeMicroseconds(speed);
+    motor_RR.writeMicroseconds(speed);
+    motor_RF.writeMicroseconds(speed);
+}
+
+void startGyro(){
+    if (!mpu.begin()) {
+        Serial.println("Failed to find MPU6050 chip");
+        delay(1000);
+        startGyro();
+    }
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
 }
 
 
