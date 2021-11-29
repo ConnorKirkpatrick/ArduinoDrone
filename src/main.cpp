@@ -1,10 +1,9 @@
-#include "../.pio/libdeps/due/Adafruit BusIO/Adafruit_BusIO_Register.h"
-#include "../.pio/libdeps/due/Adafruit BMP280 Library/Adafruit_BMP280.h"
-#include "../.pio/libdeps/due/Protothreads/src/protothreads.h"
-#include "../.pio/libdeps/due/Servo/src/Servo.h"
-#include "../lib/TinyGPSPLUS/src/TinyGPSPlus.h"
-#include "../lib/Adafruit_MPU6050/Adafruit_MPU6050.h"
-#include "C:/Users\conno\.platformio\packages\framework-arduino-sam\cores\arduino/Arduino.h"
+#include <TinyGPS++.h>
+#include "Arduino.h"
+#include "Adafruit_BMP280.h"
+#include "Adafruit_MPU6050.h"
+#include "protothreads.h"
+#include "Servo.h"
 
 
 static struct pt pt1;
@@ -46,7 +45,7 @@ Adafruit_BMP280 bmp;
 //Vcc 5v
 //use TX and RX rather than I2C
 //BAUD rate is 9600
-SoftwareSerial GPS_Connection(10, 11); //RX=pin 10, TX=pin 11
+Stream &GPS_Connection = (Stream &)Serial3;
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 float coords[6];
 
