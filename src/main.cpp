@@ -5,6 +5,8 @@
 #include "protothreads.h"
 #include "Servo.h"
 
+#include "../.pio/libdeps/due/E220Lib/E220.h"
+
 
 static struct pt pt1;
 static struct pt pt2;
@@ -15,7 +17,6 @@ static int ProtoThread2(struct pt *pt);
 static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
 
 //Define the ESC control pins
-
 #define ESC_L  7
 #define ESC_LR  6
 #define ESC_LF  5
@@ -24,8 +25,8 @@ static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
 #define ESC_RR  3
 #define ESC_RF  4
 
-//setup the servo objects for the motor
 
+//setup the servo objects for the motor
 Servo motor_L;
 Servo motor_LR;
 Servo motor_LF;
@@ -34,6 +35,10 @@ Servo motor_RR;
 Servo motor_RF;
 
 
+//Setup the pins for the radio
+#define m0 7
+#define m1 6
+#define aux 5
 
 
 //BME/P-280
@@ -45,7 +50,7 @@ Adafruit_BMP280 bmp;
 //Vcc 5v
 //use TX and RX rather than I2C
 //BAUD rate is 9600
-Stream &GPS_Connection = (Stream &)Serial3;
+Stream &GPS_Connection = (Stream &)Serial1;
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 float coords[6];
 
@@ -56,11 +61,17 @@ double adjust_x = -8.26;
 double adjust_y = -2.55;
 double adjust_z = 0;
 
+//Setup the lora radio for telemetry, command and control
+Stream &RadioConnection = (Stream &)Serial2;
+
+
 
 int flightMode = 0;
 
-void altimeter();
+void altimeterInit();
 void startGyro();
+void startRadio();
+
 void getCoords(float array[]);
 void idleAll();
 void writeAll(int speed);
@@ -96,8 +107,9 @@ void setup()
     Serial.println("GPS STARTED");
      */
     //Start the Altimeter, check its connected
-    altimeter();
+    altimeterInit();
     startGyro();
+    //startRadio();
     Serial.println("SYSTEM INITIALISED");
 }
 
@@ -175,7 +187,7 @@ static int FMC(struct pt *pt)
         ///     Work in pairs of motors, 1+6 and 2+5, decrease one pair and increase one pair to induce torque on the body
 
 
-        PT_SLEEP(pt,1000)
+        PT_SLEEP(pt,100)
     }
     PT_END(pt)
 }
@@ -214,12 +226,12 @@ static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS){
 /// On start, wait until the GPS is acquired before taking flights
 
 
-void altimeter(){
+void altimeterInit(){
     Serial.begin(9600);
     while(!bmp.begin(0x76)){
         Serial.println(F("Could not find a valid BMP280 sensor, check wiring or "
                          "try a different address!\n\n"));
-        delay(3000);
+        delay(5000);
     }
     Serial.println("BMP-280 started");
 }
@@ -231,7 +243,7 @@ float getAltitude(){
     //0Ã is bad, no power, can return when power is restored
     //12,4 is good
     if(bmp.getStatus() == 243 || bmp.getStatus() == 0){
-        altimeter();
+        altimeterInit();
     }
 
 /*    Serial.print("Temperature = ");
@@ -249,6 +261,26 @@ float getAltitude(){
     Serial.println();*/
     return bmp.readAltitude();
 }
+void startRadio(){
+    E220 radioModule(&RadioConnection, m0, m1, aux);
+    while(!radioModule.init()){
+        delay(5000);
+    }
+    Serial.println("Radio Ready");
+}
+
+void startGyro(){
+    if (!mpu.begin()) {
+        Serial.println("Failed to find MPU6050 chip");
+        delay(1000);
+        startGyro();
+    }
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
+}
+
+
 void idleAll(){
    motor_L.writeMicroseconds(1000);
    motor_LR.writeMicroseconds(1000);
@@ -267,16 +299,6 @@ void writeAll(int speed){
     motor_RF.writeMicroseconds(speed);
 }
 
-void startGyro(){
-    if (!mpu.begin()) {
-        Serial.println("Failed to find MPU6050 chip");
-        delay(1000);
-        startGyro();
-    }
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
-}
 
 
 ///LIGHTS
