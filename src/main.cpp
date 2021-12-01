@@ -60,6 +60,23 @@ Adafruit_MPU6050 mpu;
 double adjust_x = -8.26;
 double adjust_y = -2.55;
 double adjust_z = 0;
+struct attitude{
+    double pitch;
+    double roll;
+    double yaw;
+    double verticalA;
+    double lateralA;
+    double directionalA;
+} currentAttitude, calibrationAttitude;
+double pitchOffset = 0;
+double rollOffset = 0;
+double yawOffset = 0;
+
+double verticalOffset = 0;
+double directionalOffset = 0;
+double lateralOffset = 0;
+
+
 
 //Setup the lora radio for telemetry, command and control
 Stream &RadioConnection = (Stream &)Serial2;
@@ -73,6 +90,7 @@ void startGyro();
 void startRadio();
 
 void getCoords(float array[]);
+attitude getAttitude();
 void idleAll();
 void writeAll(int speed);
 
@@ -118,7 +136,7 @@ void setup()
 
 void loop() {
     PT_SCHEDULE(FMC(&pt1));
-    PT_SCHEDULE(ProtoThread2(&pt2));
+    //PT_SCHEDULE(ProtoThread2(&pt2));
     //PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
     motor_RF.writeMicroseconds(1050);
     delay(1000);
@@ -142,6 +160,7 @@ void getCoords(float array[]) {
 
 static int FMC(struct pt *pt)
 {
+    attitude newAttitude;
     PT_BEGIN(pt);
     while(1) {
         ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED, QLanded
@@ -149,6 +168,7 @@ static int FMC(struct pt *pt)
         ///For mode switches, We can simply halt the running protothread with the old mode and start the new protothread
         ///NAV speed will be limited to 1.5ms, with a possible further mode for cautious travel near obstacles being limited to 0.5ms
         ///Will have an mode array, contains a list of instructions to carry out sequentially. If empty, wait 60 seconds before performing return home
+        /// The back of the drone will be in line with the serial ports of the due
         ///TRANSITIONS:
         ///     Hover
         ///         If landed, schedule take off, schedule hover
@@ -186,8 +206,22 @@ static int FMC(struct pt *pt)
         ///     ??? send help
         ///     Work in pairs of motors, 1+6 and 2+5, decrease one pair and increase one pair to induce torque on the body
 
+        newAttitude = getAttitude();
+        Serial.println(newAttitude.pitch);
+        Serial.println("P, ");
+        Serial.println(newAttitude.roll);
+        Serial.println("R, ");
+        Serial.println(newAttitude.yaw);
+        Serial.println("Y\n");
+        Serial.print(newAttitude.verticalA);
+        Serial.println("V, ");
+        Serial.print(newAttitude.directionalA);
+        Serial.println("D, ");
+        Serial.print(newAttitude.lateralA);
+        Serial.println("L, ");
+        Serial.println("\n");
 
-        PT_SLEEP(pt,100)
+        PT_SLEEP(pt,50);
     }
     PT_END(pt)
 }
@@ -270,6 +304,12 @@ void startRadio(){
 }
 
 void startGyro(){
+    double offsetP = 0;
+    double offsetR = 0;
+    double offsetY = 0;
+    double offsetV = 0;
+    double offsetD = 0;
+    double offsetL = 0;
     if (!mpu.begin()) {
         Serial.println("Failed to find MPU6050 chip");
         delay(1000);
@@ -278,8 +318,71 @@ void startGyro(){
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
+    delay(2000);
+
+    //take 5 samples over a few seconds to get the default offsets
+
+    for(int i = 0; i < 10; i++){
+        calibrationAttitude = getAttitude();
+        offsetP = offsetP + calibrationAttitude.pitch;
+        offsetR = offsetR + calibrationAttitude.roll;
+        offsetY = offsetY + calibrationAttitude.yaw;
+
+        offsetV = offsetV + calibrationAttitude.verticalA;
+        offsetD = offsetD + calibrationAttitude.directionalA;
+        offsetL = offsetL + calibrationAttitude.lateralA;
+
+    }
+    pitchOffset = offsetP/10;
+    rollOffset = offsetR/10;
+    yawOffset = offsetY/10;
+
+    verticalOffset = offsetV/10;
+    directionalOffset = offsetD/10;
+    lateralOffset = offsetL/10;
+    Serial.println("MPU Started");
 }
 
+attitude getAttitude(){
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+    currentAttitude.verticalA = a.acceleration.z - verticalOffset;
+    currentAttitude.lateralA = a.acceleration.y - lateralOffset;
+    currentAttitude.directionalA = a.acceleration.x - directionalOffset;
+    double x;
+    double y;
+    double z;
+    const int MPU_addr=0x68;
+    int minVal=265;
+    int maxVal=402;
+    int xAng;
+    int yAng;
+    int zAng;
+    int16_t AcX,AcY,AcZ;
+    Wire.beginTransmission(MPU_addr);
+    Wire.write(0x3B);
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU_addr,14,true);
+    AcX=Wire.read()<<8|Wire.read();
+    AcY=Wire.read()<<8|Wire.read();
+    AcZ=Wire.read()<<8|Wire.read();
+    xAng = map(AcX,minVal,maxVal,-90,90);
+    yAng = map(AcY,minVal,maxVal,-90,90);
+    zAng = map(AcZ,minVal,maxVal,-90,90);
+    x= (RAD_TO_DEG * (atan2(-yAng, -zAng)+PI))-adjust_x;
+    y= (RAD_TO_DEG * (atan2(-xAng, -zAng)+PI))-adjust_y;
+    z= (RAD_TO_DEG * (atan2(-yAng, -xAng)+PI))-adjust_z;
+    if(x>=360){x = x-360;}
+    if(y>=360){y = y-360;}
+    if(z>=360){z = z-360;}
+    if(x<0){x = x+360;}
+    if(y<0){y = y+360;}
+    if(z<0){z = z+360;}
+    currentAttitude.pitch = y - pitchOffset;
+    currentAttitude.roll = x - rollOffset;
+    currentAttitude.yaw = z - yawOffset;
+    return currentAttitude;
+}
 
 void idleAll(){
    motor_L.writeMicroseconds(1000);
