@@ -378,9 +378,17 @@ attitude getAttitude(){
     if(x<0){x = x+360;}
     if(y<0){y = y+360;}
     if(z<0){z = z+360;}
-    currentAttitude.pitch = y - pitchOffset;
-    currentAttitude.roll = x - rollOffset;
-    currentAttitude.yaw = z - yawOffset;
+
+    x = x - rollOffset;
+    y = y - pitchOffset;
+    z = z - yawOffset;
+
+    if(x<= -180){x = 360+x;}
+    if(y<= -180){y = 360+y;}
+    if(z<= -180){z = 360+z;}
+    currentAttitude.pitch = y;
+    currentAttitude.roll = x;
+    currentAttitude.yaw = z;
     return currentAttitude;
 }
 
