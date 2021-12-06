@@ -1,6 +1,8 @@
 #include <Arduino.h>
-#include <SoftwareSerial.h>
-#include <TinyGPSPlus.h>
+#include "Adafruit_Sensor.h"
+#include "Adafruit_I2CDevice.h"
+#include "SPI.h"
+#include <TinyGPS++.h>
 
 //Vcc 5v
 //use TX and RX rather than I2C
@@ -8,7 +10,6 @@
 
 float coords[6];
 
-SoftwareSerial serial_connection(10, 11); //RX=pin 10, TX=pin 11
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 
 void getCoords(float array[]);
@@ -16,12 +17,13 @@ void getCoords(float array[]);
 void setup()
 {
     Serial.begin(9600);//This opens up communications to the Serial monitor in the Arduino IDE
-    serial_connection.begin(9600);//This opens up communications to the GPS
+    Serial1.begin(9600);//This opens up communications to the GPS
     Serial.println("GPS Start");//Just show to the monitor that the sketch has started
 }
 
 void loop()
 {
+    Serial.println(Serial1.read());
     //query GPS
     getCoords(coords);
     //if there is no satellites, no valid fix can be made thus retry
@@ -41,14 +43,15 @@ void loop()
     Serial.print("altitude(m): ");
     Serial.println(coords[5]);
     Serial.println("\n\n\n");
-    delay(10000);
+    delay(1000);
 }
 
 void getCoords(float array[]){
+    Serial.println(Serial1.read());
     while(!gps.location.isUpdated()){
-        while(serial_connection.available())//While there are characters to come from the GPS
+        while(Serial1.available())//While there are characters to come from the GPS
         {
-            gps.encode(serial_connection.read());//This feeds the serial NMEA data into the library one char at a time
+            gps.encode(Serial1.read());//This feeds the serial NMEA data into the library one char at a time
         }
     }
     array[0] = gps.satellites.value();
@@ -84,4 +87,4 @@ void getCoords(float array[]){
 
 /// Best use case; offload the reading and encoding onto a protoThread
 /// Use the static GPS object to query for the coords at a more reasonable interval
-/// On start, wait until the GPS is acquired before taking flights
+/// On start, wait until the GPS is acquired before taking flight
