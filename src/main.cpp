@@ -1,5 +1,5 @@
-#include <TinyGPS++.h>
 #include "Arduino.h"
+#include <TinyGPS++.h>
 #include "Adafruit_BMP280.h"
 #include "Adafruit_MPU6050.h"
 #include "protothreads.h"
@@ -45,14 +45,18 @@ Servo motor_RF;
 //connect via I2C ports
 //VCC 5v
 Adafruit_BMP280 bmp;
+void altimeterInit();
 
 
 //Vcc 5v
 //use TX and RX rather than I2C
 //BAUD rate is 9600
-Stream &GPS_Connection = (Stream &)Serial1;
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
 float coords[6];
+float lastFix[2];
+double distanceFromLastFix;
+void startGPS();
+void getCoords(float array[]);
 
 //Motion processing unit, our gyroscope
 Adafruit_MPU6050 mpu;
@@ -71,11 +75,16 @@ struct attitude{
 double pitchOffset = 0;
 double rollOffset = 0;
 double yawOffset = 0;
-
 double verticalOffset = 0;
 double directionalOffset = 0;
 double lateralOffset = 0;
 
+float oldTime = 0;
+float newTime = 0;
+
+
+void startGyro();
+attitude getAttitude();
 
 
 //Setup the lora radio for telemetry, command and control
@@ -85,12 +94,10 @@ Stream &RadioConnection = (Stream &)Serial2;
 
 int flightMode = 0;
 
-void altimeterInit();
-void startGyro();
+
 void startRadio();
 
-void getCoords(float array[]);
-attitude getAttitude();
+
 void idleAll();
 void writeAll(int speed);
 
@@ -98,6 +105,7 @@ void setup()
 {
     delay(1000);
     Serial.begin(9600);
+    //Serial1.begin(9600);
     Serial.println("SYSTEM INITIALISING");
 
 
@@ -116,46 +124,64 @@ void setup()
     motor_RF.attach(ESC_RF);
     idleAll();
     Serial.println("MOTORS READY");
-    /*
-    //setup the GPS, check the data is good
-    GPS_Connection.begin(9600);//This opens up communications to the GPS
-    while(coords[0] < 2){
-        getCoords(coords);
-    }
-    Serial.println("GPS STARTED");
-     */
+    //Start the gps
+    startGPS();
     //Start the Altimeter, check its connected
     altimeterInit();
     startGyro();
     //startRadio();
     Serial.println("SYSTEM INITIALISED");
+    oldTime = millis();
 }
 
 
 
 
 void loop() {
+    /*
     PT_SCHEDULE(FMC(&pt1));
     //PT_SCHEDULE(ProtoThread2(&pt2));
     //PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
     motor_RF.writeMicroseconds(1050);
     delay(1000);
     idleAll();
-}
-
-void getCoords(float array[]) {
-    while (!gps.location.isUpdated()) {
-        while (GPS_Connection.available())//While there are characters to come from the GPS
-        {
-            gps.encode(GPS_Connection.read());//This feeds the serial NMEA data into the library one char at a time
-        }
+     */
+    /// speed = acceleration*duration
+    currentAttitude = getAttitude();
+    /*
+    getCoords(coords);
+    if(coords[1] != oldTime){
+        Serial.print("Sats: ");
+        Serial.println(coords[0],0);
+        Serial.print("Time: ");
+        Serial.println(coords[1],0);
+        newTime = coords[1];
+        Serial.print("LAT: ");
+        Serial.println(coords[2],6);
+        Serial.print("LNG: ");
+        Serial.println(coords[3],6);
+        Serial.print("Speed(m/s): ");
+        Serial.println(coords[4]);
+        Serial.print("altitude(m): ");
+        Serial.println(coords[5]);
+        Serial.println("");
+        //distanceFromLastFix = gps.distanceBetween(EIFFEL_TOWER_LAT,EIFFEL_TOWER_LNG,coords[2],coords[3]);
+        distanceFromLastFix = gps.distanceBetween(lastFix[0],lastFix[1],coords[2],coords[3]);
+        Serial.print("Distance since last fix: ");
+        Serial.println(distanceFromLastFix);
+        lastFix[0] = coords[2];
+        lastFix[1] = coords[3];
+        Serial.println("");
+        Serial.print("Time passed: ");
+        int timePassed = (newTime - oldTime)/100;
+        Serial.print(timePassed);
+        Serial.println(" Seconds");
+        oldTime = newTime;
+        Serial.print("Speed: ");
+        Serial.print(distanceFromLastFix/timePassed);
+        Serial.println(" M/S");
+        Serial.println("\n\n\n");
     }
-    array[0] = gps.satellites.value();
-    array[1] = gps.time.value();
-    array[2] = gps.location.lat();
-    array[3] = gps.location.lng();
-    array[4] = gps.speed.mps();
-    array[5] = gps.altitude.meters();
 }
 
 static int FMC(struct pt *pt)
@@ -259,15 +285,43 @@ static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS){
 /// Use the static GPS object to query for the coords at a more reasonable interval
 /// On start, wait until the GPS is acquired before taking flights
 
+void startGPS(){
+    Serial1.begin(9600);
+    getCoords(coords);
+    //if there is no satellites, no valid fix can be made thus retry
+    while(coords[0] < 1) {
+        getCoords(coords);
+    }
+    Serial.println("GPS Started");
+    lastFix[0] = coords[2];
+    lastFix[1] = coords[3];
+    oldTime = coords[1];
+}
+
+void getCoords(float array[]){
+    if(Serial1.available()){
+        while(Serial1.available())//While there are characters to come from the GPS
+        {
+            gps.encode(Serial1.read());//This feeds the serial NMEA data into the library one char at a time
+        }
+    }
+    if(gps.location.isUpdated()){
+        array[0] = gps.satellites.value();
+        array[1] = gps.time.value();
+        array[2] = gps.location.lat();
+        array[3] = gps.location.lng();
+        array[4] = gps.speed.mps();
+        array[5] = gps.altitude.meters();
+    }
+}
 
 void altimeterInit(){
-    Serial.begin(9600);
     while(!bmp.begin(0x76)){
         Serial.println(F("Could not find a valid BMP280 sensor, check wiring or "
                          "try a different address!\n\n"));
         delay(5000);
     }
-    Serial.println("BMP-280 started");
+    Serial.println("Altimeter Started");
 }
 
 float getAltitude(){
@@ -340,7 +394,7 @@ void startGyro(){
     verticalOffset = offsetV/10;
     directionalOffset = offsetD/10;
     lateralOffset = offsetL/10;
-    Serial.println("MPU Started");
+    Serial.println("Gyro Started");
 }
 
 attitude getAttitude(){
