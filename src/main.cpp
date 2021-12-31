@@ -1,11 +1,13 @@
 #include "Arduino.h"
-#include <TinyGPS++.h>
+#include "TinyGPS++.h"
 #include "Adafruit_BMP280.h"
 #include "Adafruit_MPU6050.h"
 #include "protothreads.h"
 #include "Servo.h"
 
 #include "../.pio/libdeps/due/E220Lib/E220.h"
+
+#include "math.h"
 
 
 static struct pt pt1;
@@ -27,19 +29,27 @@ static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
 
 
 //setup the servo objects for the motor
-Servo motor_L;
-Servo motor_LR;
-Servo motor_LF;
-Servo motor_R;
-Servo motor_RR;
-Servo motor_RF;
+Servo motor_1;
+Servo motor_2;
+Servo motor_3;
+Servo motor_4;
+Servo motor_5;
+Servo motor_6;
 
+//setup the throttle values
+int throttle = 1150; //arming value
+
+int T1 = 0;
+int T2 = 0;
+int T3 = 0;
+int T4 = 0;
+int T5 = 0;
+int T6 = 0;
 
 //Setup the pins for the radio
-#define m0 7
-#define m1 6
-#define aux 5
-
+#define m0 8
+#define m1 9
+#define aux 13
 
 //BME/P-280
 //connect via I2C ports
@@ -71,16 +81,13 @@ struct attitude{
     double verticalA;
     double lateralA;
     double directionalA;
-} currentAttitude, calibrationAttitude;
+} currentAttitude, calibrationAttitude, newAttitude;
 double pitchOffset = 0;
 double rollOffset = 0;
 double yawOffset = 0;
 double verticalOffset = 0;
 double directionalOffset = 0;
 double lateralOffset = 0;
-
-float oldTime = 0;
-float newTime = 0;
 
 
 void startGyro();
@@ -90,7 +97,13 @@ attitude getAttitude();
 //Setup the lora radio for telemetry, command and control
 Stream &RadioConnection = (Stream &)Serial2;
 
-
+///flight control
+void pitch(float pitchVal);
+void roll(float rollVal);
+void setThrottle();
+int desiredHeight();
+int oldHeight;
+void setSpeed();
 
 int flightMode = 0;
 
@@ -105,7 +118,8 @@ void setup()
 {
     delay(1000);
     Serial.begin(9600);
-    //Serial1.begin(9600);
+    Serial1.begin(9600);
+    Serial2.begin(9600);
     Serial.println("SYSTEM INITIALISING");
 
 
@@ -113,80 +127,64 @@ void setup()
     PT_INIT(&pt2);
 
     ///STARTUP CHECKLIST
+    //startRadio();
 
     //setup the motors, set to idle
-    motor_L.attach(ESC_L);
-    motor_LR.attach(ESC_LR);
-    motor_LF.attach(ESC_LF);
+    motor_1.attach(ESC_LF);
+    motor_2.attach(ESC_RF);
+    motor_3.attach(ESC_L);
+    motor_4.attach(ESC_R);
+    motor_5.attach(ESC_LR);
+    motor_6.attach(ESC_RR);
 
-    motor_R.attach(ESC_R);
-    motor_RR.attach(ESC_RR);
-    motor_RF.attach(ESC_RF);
     idleAll();
     Serial.println("MOTORS READY");
     //Start the gps
-    startGPS();
+    ///startGPS();
     //Start the Altimeter, check its connected
     altimeterInit();
+    //start the gyro
     startGyro();
-    //startRadio();
+
     Serial.println("SYSTEM INITIALISED");
-    oldTime = millis();
 }
 
 
 
 
 void loop() {
-    /*
-    PT_SCHEDULE(FMC(&pt1));
-    //PT_SCHEDULE(ProtoThread2(&pt2));
-    //PT_SCHEDULE(GPSThread(&gpsThread, coords, gps));
-    motor_RF.writeMicroseconds(1050);
-    delay(1000);
-    idleAll();
-     */
-    /// speed = acceleration*duration
+    ///Hovering:
+    /// all motors have a fixed throttle setting between 1000 and 2000
+    /// we check pitch, roll then yaw
+    /// pitch targets motors 1,2 and 5,6. where any pair increases, the other pair decreases the same amount
+    /// roll targets trios 1,3,5 and 2,4,6. same principle, where one set is affected inversely to the other
+    /// yaw targets 1,4,5 and 2,3,6. same as above
+    /// throttle is controlled by the range/altitude sensors, it does not change based on pitch
+    /// attitude controls all make their adjustments, the average of all these changes is taken as the new setting. in future there will be a way to better combine them
+    /// end of loop is setting the new speed.
+    /// we work on degrees, where each degree is multiplied by a value to get the new change in(?) or fixed with 1 degree per 5 points increase
+    /// could do every 0.1 degree for 1 point increase, gives 900 points out of our 1000 range
+    ///     However throttle will probs be 300 degrees so we are going over, but probs will never see > 30 degrees, so 300 puts us at comfortable 600
+
     currentAttitude = getAttitude();
-    /*
-    getCoords(coords);
-    if(coords[1] != oldTime){
-        Serial.print("Sats: ");
-        Serial.println(coords[0],0);
-        Serial.print("Time: ");
-        Serial.println(coords[1],0);
-        newTime = coords[1];
-        Serial.print("LAT: ");
-        Serial.println(coords[2],6);
-        Serial.print("LNG: ");
-        Serial.println(coords[3],6);
-        Serial.print("Speed(m/s): ");
-        Serial.println(coords[4]);
-        Serial.print("altitude(m): ");
-        Serial.println(coords[5]);
-        Serial.println("");
-        //distanceFromLastFix = gps.distanceBetween(EIFFEL_TOWER_LAT,EIFFEL_TOWER_LNG,coords[2],coords[3]);
-        distanceFromLastFix = gps.distanceBetween(lastFix[0],lastFix[1],coords[2],coords[3]);
-        Serial.print("Distance since last fix: ");
-        Serial.println(distanceFromLastFix);
-        lastFix[0] = coords[2];
-        lastFix[1] = coords[3];
-        Serial.println("");
-        Serial.print("Time passed: ");
-        int timePassed = (newTime - oldTime)/100;
-        Serial.print(timePassed);
-        Serial.println(" Seconds");
-        oldTime = newTime;
-        Serial.print("Speed: ");
-        Serial.print(distanceFromLastFix/timePassed);
-        Serial.println(" M/S");
-        Serial.println("\n\n\n");
-    }
+    ///decimal rounding
+    float pitchVal = (float)(round(currentAttitude.pitch*10))/10;
+    float rollVal = (float)(round(currentAttitude.roll*10))/10;
+    float yawVal = (float)(round(currentAttitude.yaw*10))/10;
+    pitch(pitchVal);
+    roll(rollVal);
+
+    setSpeed();
+    //yaw(yawVal);
+    ///To adjust throttle, each function decides the new power per motor and adds it to the Tx value.
+    /// At the end of the loop, we take each Tx value, divide it by 3 to get the average and apply it
+
+
+
 }
 
 static int FMC(struct pt *pt)
 {
-    attitude newAttitude;
     PT_BEGIN(pt);
     while(1) {
         ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED, QLanded
@@ -230,7 +228,7 @@ static int FMC(struct pt *pt)
         ///     Pairs of motors, 1+2 and 5+6 increase and decrease RPM inversely, to go forward, 1+2 drop by 2%, 5+6 increase by 2%
         ///Rotation:
         ///     ??? send help
-        ///     Work in pairs of motors, 1+6 and 2+5, decrease one pair and increase one pair to induce torque on the body
+        ///     Work in pairs of motors, 1+4+5 and 2+3+6, decrease one set and increase one set to induce torque on the body
 
         newAttitude = getAttitude();
         Serial.println(newAttitude.pitch);
@@ -284,6 +282,15 @@ static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS){
 /// Best use case; offload the reading and encoding onto a protoThread
 /// Use the static GPS object to query for the coords at a more reasonable interval
 /// On start, wait until the GPS is acquired before taking flights
+
+void startRadio(){
+   E220 radioModule(&RadioConnection, m0, m1, aux);
+    while(!radioModule.init()){
+        delay(5000);
+    }
+    Serial.println("Radio Ready");
+
+}
 
 void startGPS(){
     Serial1.begin(9600);
@@ -349,13 +356,6 @@ float getAltitude(){
     Serial.println();*/
     return bmp.readAltitude();
 }
-void startRadio(){
-    E220 radioModule(&RadioConnection, m0, m1, aux);
-    while(!radioModule.init()){
-        delay(5000);
-    }
-    Serial.println("Radio Ready");
-}
 
 void startGyro(){
     double offsetP = 0;
@@ -385,6 +385,7 @@ void startGyro(){
         offsetV = offsetV + calibrationAttitude.verticalA;
         offsetD = offsetD + calibrationAttitude.directionalA;
         offsetL = offsetL + calibrationAttitude.lateralA;
+        delay(100);
 
     }
     pitchOffset = offsetP/10;
@@ -440,6 +441,9 @@ attitude getAttitude(){
     if(x<= -180){x = 360+x;}
     if(y<= -180){y = 360+y;}
     if(z<= -180){z = 360+z;}
+
+    if(x > 180){x = x-360;}
+
     currentAttitude.pitch = y;
     currentAttitude.roll = x;
     currentAttitude.yaw = z;
@@ -447,25 +451,118 @@ attitude getAttitude(){
 }
 
 void idleAll(){
-   motor_L.writeMicroseconds(1000);
-   motor_LR.writeMicroseconds(1000);
-   motor_LF.writeMicroseconds(1000);
-   motor_R.writeMicroseconds(1000);
-   motor_RR.writeMicroseconds(1000);
-   motor_RF.writeMicroseconds(1000);
-}
-
-void writeAll(int speed){
-    motor_L.writeMicroseconds(speed);
-    motor_LR.writeMicroseconds(speed);
-    motor_LF.writeMicroseconds(speed);
-    motor_R.writeMicroseconds(speed);
-    motor_RR.writeMicroseconds(speed);
-    motor_RF.writeMicroseconds(speed);
+   motor_1.writeMicroseconds(1000);
+   motor_2.writeMicroseconds(1000);
+   motor_3.writeMicroseconds(1000);
+   motor_4.writeMicroseconds(1000);
+   motor_5.writeMicroseconds(1000);
+   motor_6.writeMicroseconds(1000);
 }
 
 
 
+///ATTITUDE CONTROL
+void pitch(float pitchVal){
+    int adjustment =pitchVal*10;
+    ///if pitch is positive, we add to rear, subtract from front
+    ///Front motors are 1,2, rear are 5,6; we use equal change
+
+    //adjust forward
+    int newSpeed = throttle - adjustment;
+    if (newSpeed < 1050) { newSpeed = 1050; }
+    if (newSpeed > 2000) { newSpeed = 2000; }
+    T1 = T1 + newSpeed;
+    T2 = T2 + newSpeed;
+    //adjust rear
+    newSpeed = throttle + adjustment;
+    if (newSpeed < 1050) { newSpeed = 1050; }
+    if (newSpeed > 2000) { newSpeed = 2000; }
+    T5 = T5 + newSpeed;
+    T6 = T6 + newSpeed;
+
+    T3 = T3 + throttle;
+    T4 = T4 + throttle;
+}
+
+void roll(float rollValue){
+    int adjustment = rollValue*10;
+    ///rolling right is positive
+    ///left motors are 1,3,5. Right are 2,4,6
+    ///if pitched right, we add to right motors, subtract from left
+    int newSpeed = throttle - adjustment;
+    if (newSpeed < 1050) { newSpeed = 1050; }
+    if (newSpeed > 2000) { newSpeed = 2000; }
+    T1 = T1 + newSpeed;
+    T3 = T3 + newSpeed;
+    T5 = T5 + newSpeed;
+
+    newSpeed = throttle + adjustment;
+    if (newSpeed < 1050) { newSpeed = 1050; }
+    if (newSpeed > 2000) { newSpeed = 2000; }
+    T2 = T2 + newSpeed;
+    T4 = T4 + newSpeed;
+    T6 = T6 + newSpeed;
+
+}
+
+void setThrottle(){
+    ///we check the current alt vs the desired alt
+    ///if current is outside of desired +- 10 we make a change
+
+}
+
+void setSpeed(){
+    T1 = T1/2;
+    T2 = T2/2;
+    T3 = T3/2;
+    T4 = T4/2;
+    T5 = T5/2;
+    T6 = T6/2;
+
+    Serial.println(T1);
+    Serial.println(T2);
+    Serial.println(T3);
+    Serial.println(T4);
+    Serial.println(T5);
+    Serial.println(T6);
+    Serial.println();
+
+    motor_1.writeMicroseconds(T1);
+    motor_2.writeMicroseconds(T2);
+    motor_3.writeMicroseconds(T3);
+    motor_4.writeMicroseconds(T4);
+    motor_5.writeMicroseconds(T5);
+    motor_6.writeMicroseconds(T6);
+
+    T1 = 0;
+    T2 = 0;
+    T3 = 0;
+    T4 = 0;
+    T5 = 0;
+    T6 = 0;
+}
+void test(){
+    Serial.println("Starting Test....");
+    delay(5000);
+    Serial.println("Start: ");
+    digitalWrite(LED_BUILTIN, HIGH);
+    motor_1.writeMicroseconds(1050);
+    delay(500);
+    motor_2.writeMicroseconds(1050);
+    delay(500);
+    motor_3.writeMicroseconds(1050);
+    delay(500);
+    motor_4.writeMicroseconds(1050);
+    delay(500);
+    motor_5.writeMicroseconds(1050);
+    delay(500);
+    motor_6.writeMicroseconds(1050);
+    delay(2000);
+    digitalWrite(LED_BUILTIN, LOW);
+    idleAll();
+    Serial.println("Test completed");
+    delay(60000);
+}
 ///LIGHTS
 ///Nav lights do not blink, red and green
 ///Anti-collision do blink, red or white
