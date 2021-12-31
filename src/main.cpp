@@ -99,25 +99,27 @@ attitude getAttitude();
 //Setup the lora radio for telemetry, command and control
 Stream &RadioConnection = (Stream &)Serial2;
 
-//define the objects for the ultrasonic sensors
-#define triggerPin 52
-#define echoPin 53
+//define the objects for the ultrasonic sensors (Odd value is the trigger)
+#define heightTrigger 39
+#define heightEcho 38
+
 long duration;
 int distance;
-int getDistance();
-MedianFilter2<int> medianFilter2(5);
+MedianFilter2<int> heightFilter(5);
+void startUltrasonic();
+void getUltrasonic();
 
-/*
- *     pinMode(triggerPin, OUTPUT);
-    pinMode(echoPin, INPUT);
- */
+
 
 ///flight control
 void pitch(float pitchVal);
 void roll(float rollVal);
+
+
 void setThrottle();
-int desiredHeight();
-int oldHeight;
+int desiredHeight = 15;
+int oldHeight = 0;
+
 void setSpeed();
 
 int flightMode = 0;
@@ -160,6 +162,7 @@ void setup()
     altimeterInit();
     //start the gyro
     startGyro();
+    startUltrasonic();
 
     Serial.println("SYSTEM INITIALISED");
 }
@@ -181,7 +184,10 @@ void loop() {
     /// could do every 0.1 degree for 1 point increase, gives 900 points out of our 1000 range
     ///     However throttle will probs be 300 degrees so we are going over, but probs will never see > 30 degrees, so 300 puts us at comfortable 600
 
-    currentAttitude = getAttitude();
+
+    //currentAttitude = getAttitude();
+    getUltrasonic();
+    /*
     ///decimal rounding
     float pitchVal = (float)(round(currentAttitude.pitch*10))/10;
     float rollVal = (float)(round(currentAttitude.roll*10))/10;
@@ -193,10 +199,10 @@ void loop() {
     //yaw(yawVal);
     ///To adjust throttle, each function decides the new power per motor and adds it to the Tx value.
     /// At the end of the loop, we take each Tx value, divide it by 3 to get the average and apply it
+    */
 
-    int median = medianFilter2.AddValue(getDistance());
-    Serial.println(median);
-    Serial.println(medianFilter2.GetFiltered());
+    Serial.println(heightFilter.GetFiltered());
+    setThrottle();
 
 
 }
@@ -320,7 +326,6 @@ void startGPS(){
     Serial.println("GPS Started");
     lastFix[0] = coords[2];
     lastFix[1] = coords[3];
-    oldTime = coords[1];
 }
 
 void getCoords(float array[]){
@@ -468,6 +473,27 @@ attitude getAttitude(){
     return currentAttitude;
 }
 
+void startUltrasonic(){
+    pinMode(heightTrigger, OUTPUT);
+    pinMode(heightEcho, INPUT);
+}
+void getUltrasonic(){
+    //get the system ready
+    digitalWrite(heightTrigger, LOW);
+    delayMicroseconds(5);
+    //send out a pulse
+    digitalWrite(heightTrigger, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(heightTrigger, LOW);
+    //read the pulse
+    duration = pulseIn(heightEcho, HIGH);
+    //calculate distance by the delay
+    distance = duration * 0.034 / 2;
+    Serial.println(distance);
+    heightFilter.AddValue(distance);
+    //Ideally we are running all the US sensors in this window due to the required 15us wait time
+}
+
 void idleAll(){
    motor_1.writeMicroseconds(1000);
    motor_2.writeMicroseconds(1000);
@@ -526,6 +552,44 @@ void roll(float rollValue){
 void setThrottle(){
     ///we check the current alt vs the desired alt
     ///if current is outside of desired +- 10 we make a change
+    /// Ideally we reduce the speed when we are close to the desired alt to have some form of curve
+    desiredHeight ;
+    int currentHeight = heightFilter.GetFiltered();
+    //we are below desired height
+    if(currentHeight < desiredHeight - 10){
+        Serial.println("Increasing power");
+        if(currentHeight > oldHeight){
+            oldHeight = currentHeight;
+            //do nothing as we are already ascending
+        }
+        else{
+            throttle = throttle + 50;
+        }
+    }
+    //we are above desired height
+    else if(currentHeight > desiredHeight + 10){
+        Serial.println("Decreasing power");
+        if(currentHeight < oldHeight){
+            oldHeight = currentHeight;
+            //do nothing as we are already descending
+        }
+        else{
+            throttle = throttle - 50;
+        }
+    }
+    //we are withing the bounds for the altitude
+    else{
+        Serial.println("Fine Tuning");
+        if(currentHeight > oldHeight){
+            //we are ascending, reduce power
+            throttle = throttle - 10;
+        }
+        else if(currentHeight < oldHeight){
+            //we are descending, increase power
+            throttle = throttle + 10;
+        }
+    }
+
 
 }
 
@@ -585,20 +649,5 @@ void test(){
 ///Nav lights do not blink, red and green
 ///Anti-collision do blink, red or white
 
-int getDistance(){
-    //get the system ready
-    digitalWrite(triggerPin, LOW);
-    delayMicroseconds(5);
-    //send out a pulse
-    digitalWrite(triggerPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(triggerPin, LOW);
-    //read the pulse
-    duration = pulseIn(echoPin, HIGH);
-    //calculate distance by the delay
-    distance = duration * 0.034 / 2;
-
-    return distance;
-}
 
 //TODO: query x times per second, remove outliers, take average
