@@ -5,6 +5,8 @@
 #include "protothreads.h"
 #include "Servo.h"
 
+#include <MedianFilterLib2.h>
+
 #include "../.pio/libdeps/due/E220Lib/E220.h"
 
 #include "math.h"
@@ -97,6 +99,19 @@ attitude getAttitude();
 //Setup the lora radio for telemetry, command and control
 Stream &RadioConnection = (Stream &)Serial2;
 
+//define the objects for the ultrasonic sensors
+#define triggerPin 52
+#define echoPin 53
+long duration;
+int distance;
+int getDistance();
+MedianFilter2<int> medianFilter2(5);
+
+/*
+ *     pinMode(triggerPin, OUTPUT);
+    pinMode(echoPin, INPUT);
+ */
+
 ///flight control
 void pitch(float pitchVal);
 void roll(float rollVal);
@@ -179,6 +194,9 @@ void loop() {
     ///To adjust throttle, each function decides the new power per motor and adds it to the Tx value.
     /// At the end of the loop, we take each Tx value, divide it by 3 to get the average and apply it
 
+    int median = medianFilter2.AddValue(getDistance());
+    Serial.println(median);
+    Serial.println(medianFilter2.GetFiltered());
 
 
 }
@@ -566,3 +584,21 @@ void test(){
 ///LIGHTS
 ///Nav lights do not blink, red and green
 ///Anti-collision do blink, red or white
+
+int getDistance(){
+    //get the system ready
+    digitalWrite(triggerPin, LOW);
+    delayMicroseconds(5);
+    //send out a pulse
+    digitalWrite(triggerPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(triggerPin, LOW);
+    //read the pulse
+    duration = pulseIn(echoPin, HIGH);
+    //calculate distance by the delay
+    distance = duration * 0.034 / 2;
+
+    return distance;
+}
+
+//TODO: query x times per second, remove outliers, take average
