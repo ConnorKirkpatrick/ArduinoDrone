@@ -97,8 +97,9 @@ attitude getAttitude();
 
 
 //Setup the lora radio for telemetry, command and control
-Stream &RadioConnection = (Stream &)Serial2;
-
+//Stream &RadioConnection = (Stream &)Serial2;
+Stream &RadioConnection = (Stream &)Serial;
+String message;
 //define the objects for the ultrasonic sensors (Odd value is the trigger)
 #define heightTrigger 39
 #define heightEcho 38
@@ -108,6 +109,18 @@ int distance;
 MedianFilter2<int> heightFilter(5);
 void startUltrasonic();
 void getUltrasonic();
+
+
+//battery sensor
+#define ampPin A0
+#define voltPin A1
+///We scale 180a over 1024 points, so each point = 0.17578 a
+#define ampScale 0.176 //better to overestimate the useage than run out of amps and crash
+///We scale 50v over 1024 points, thus each point = 0.04882 v
+#define voltScale 0.04882 // Better to underestimate as before
+float amps = 0;
+float voltage = 0;
+void getBatteryValues();
 
 
 
@@ -164,13 +177,61 @@ void setup()
     startGyro();
     startUltrasonic();
 
+    //start battery monitor
+    pinMode(ampPin, INPUT);
+    pinMode(voltPin, INPUT);
+    getBatteryValues();
+
     Serial.println("SYSTEM INITIALISED");
+    delay(3000);
 }
 
 
 
 
 void loop() {
+    ///always radio first, read one loop, act on it the next loop
+    if(RadioConnection.available()){
+        message = RadioConnection.readString();
+        Serial.println(message);
+    }
+
+    if(message.equals("Start\n")){
+        RadioConnection.println("Starting flight");
+        flightMode = 1;
+        message = "";
+    }
+    else if(message.indexOf("setHeight") > -1){
+        desiredHeight = message.substring(message.indexOf("setHeight")+9).toInt();
+        RadioConnection.write("New height set to: ");
+        RadioConnection.println(desiredHeight);
+        message = "";
+    }
+    else if(message.equals("end\n")){
+        Serial.println("ENDING");
+        flightMode = 0;
+        idleAll();
+        message = "";
+    }
+
+    if(flightMode == 1){
+        currentAttitude = getAttitude();
+        getUltrasonic();
+
+        ///decimal rounding
+        float pitchVal = (float)(round(currentAttitude.pitch*10))/10;
+        float rollVal = (float)(round(currentAttitude.roll*10))/10;
+        float yawVal = (float)(round(currentAttitude.yaw*10))/10;
+        pitch(pitchVal);
+        roll(rollVal);
+        setSpeed();
+        //yaw(yawVal);
+
+        setThrottle();
+
+    }
+
+
     ///Hovering:
     /// all motors have a fixed throttle setting between 1000 and 2000
     /// we check pitch, roll then yaw
@@ -185,24 +246,10 @@ void loop() {
     ///     However throttle will probs be 300 degrees so we are going over, but probs will never see > 30 degrees, so 300 puts us at comfortable 600
 
 
-    //currentAttitude = getAttitude();
-    getUltrasonic();
-    /*
-    ///decimal rounding
-    float pitchVal = (float)(round(currentAttitude.pitch*10))/10;
-    float rollVal = (float)(round(currentAttitude.roll*10))/10;
-    float yawVal = (float)(round(currentAttitude.yaw*10))/10;
-    pitch(pitchVal);
-    roll(rollVal);
 
-    setSpeed();
-    //yaw(yawVal);
-    ///To adjust throttle, each function decides the new power per motor and adds it to the Tx value.
-    /// At the end of the loop, we take each Tx value, divide it by 3 to get the average and apply it
-    */
-
-    Serial.println(heightFilter.GetFiltered());
-    setThrottle();
+    //getBatteryValues();
+    //Serial.println(voltage);
+    //Serial.println(amps);
 
 
 }
@@ -493,6 +540,13 @@ void getUltrasonic(){
     heightFilter.AddValue(distance);
     //Ideally we are running all the US sensors in this window due to the required 15us wait time
 }
+
+void getBatteryValues(){
+    amps = analogRead(ampPin)*ampScale;
+    voltage = analogRead(voltPin)*voltScale;
+}
+
+
 
 void idleAll(){
    motor_1.writeMicroseconds(1000);
