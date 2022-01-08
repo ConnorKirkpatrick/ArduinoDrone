@@ -2,19 +2,18 @@
 #include "TinyGPS++.h"
 #include "Adafruit_BMP280.h"
 #include "Adafruit_MPU6050.h"
-#include "protothreads.h"
 #include "Servo.h"
 
 #include <MedianFilterLib2.h>
 
-#include "../.pio/libdeps/due/E220Lib/E220.h"
+#include "../.pio//libdeps/due/E220Lib/src/E220.h"
 
 #include "math.h"
 
 
-static struct pt pt1;
-static struct pt pt2;
-static struct pt gpsThread;
+//static struct pt pt1;
+//static struct pt pt2;
+//static struct pt gpsThread;
 
 static int FMC(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
@@ -39,7 +38,7 @@ Servo motor_5;
 Servo motor_6;
 
 //setup the throttle values
-int throttle = 1150; //arming value
+int throttle = 1000; //arming value
 
 int T1 = 0;
 int T2 = 0;
@@ -47,11 +46,16 @@ int T3 = 0;
 int T4 = 0;
 int T5 = 0;
 int T6 = 0;
-
-//Setup the pins for the radio
+void test();
+//Setup the lora radio for telemetry, command and control
+Stream &RadioConnection = (Stream &)Serial2;
+//Stream &RadioConnection = (Stream &)Serial;
+String message;
 #define m0 8
 #define m1 9
 #define aux 13
+int lastMessageTime;
+int currentTime;
 
 //BME/P-280
 //connect via I2C ports
@@ -90,16 +94,16 @@ double yawOffset = 0;
 double verticalOffset = 0;
 double directionalOffset = 0;
 double lateralOffset = 0;
+float pitchVal;
+float rollVal;
+float yawVal;
 
 
 void startGyro();
 attitude getAttitude();
 
 
-//Setup the lora radio for telemetry, command and control
-//Stream &RadioConnection = (Stream &)Serial2;
-Stream &RadioConnection = (Stream &)Serial;
-String message;
+
 //define the objects for the ultrasonic sensors (Odd value is the trigger)
 #define heightTrigger 39
 #define heightEcho 38
@@ -146,29 +150,31 @@ void writeAll(int speed);
 
 void setup()
 {
-    delay(1000);
+    delay(5000);
     Serial.begin(9600);
     Serial1.begin(9600);
     Serial2.begin(9600);
     Serial.println("SYSTEM INITIALISING");
-
-
-    PT_INIT(&pt1);
-    PT_INIT(&pt2);
-
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN,LOW);
     ///STARTUP CHECKLIST
-    //startRadio();
-
+    E220 radioModule(&RadioConnection, m0, m1, aux);
+    while(!radioModule.init()){
+        delay(5000);
+    }
+    RadioConnection.println("Radio Ready");
     //setup the motors, set to idle
-    motor_1.attach(ESC_LF);
-    motor_2.attach(ESC_RF);
-    motor_3.attach(ESC_L);
-    motor_4.attach(ESC_R);
-    motor_5.attach(ESC_LR);
-    motor_6.attach(ESC_RR);
-
+    motor_1.attach(5);
+    motor_2.attach(4);
+    motor_3.attach(7);
+    motor_4.attach(2);
+    motor_5.attach(6);
+    motor_6.attach(3);
     idleAll();
-    Serial.println("MOTORS READY");
+    RadioConnection.println("MOTORS READY");
+    delay(5000);
+    test();
+    /*
     //Start the gps
     ///startGPS();
     //Start the Altimeter, check its connected
@@ -182,18 +188,20 @@ void setup()
     pinMode(voltPin, INPUT);
     getBatteryValues();
 
-    Serial.println("SYSTEM INITIALISED");
-    delay(3000);
+    RadioConnection.println("SYSTEM INITIALISED");
+    lastMessageTime = millis();
+     */
 }
 
 
 
 
 void loop() {
+    /*
+    currentTime = millis();
     ///always radio first, read one loop, act on it the next loop
     if(RadioConnection.available()){
         message = RadioConnection.readString();
-        Serial.println(message);
     }
 
     if(message.equals("Start\n")){
@@ -208,30 +216,34 @@ void loop() {
         message = "";
     }
     else if(message.equals("end\n")){
-        Serial.println("ENDING");
+        RadioConnection.println("ENDING");
         flightMode = 0;
         idleAll();
         message = "";
     }
+    else if(message.equals("Test\n")){
+        RadioConnection.println("TESTING");
+        message = "";
+        test();
+    }
 
+    currentAttitude = getAttitude();
+    getUltrasonic();
+
+    getBatteryValues();
+    /*
     if(flightMode == 1){
-        currentAttitude = getAttitude();
-        getUltrasonic();
-
         ///decimal rounding
-        float pitchVal = (float)(round(currentAttitude.pitch*10))/10;
-        float rollVal = (float)(round(currentAttitude.roll*10))/10;
-        float yawVal = (float)(round(currentAttitude.yaw*10))/10;
+        pitchVal = (float)(round(currentAttitude.pitch*10))/10;
+        rollVal = (float)(round(currentAttitude.roll*10))/10;
+        yawVal = (float)(round(currentAttitude.yaw*10))/10;
         pitch(pitchVal);
         roll(rollVal);
         setSpeed();
         //yaw(yawVal);
-
         setThrottle();
-
     }
-
-
+    */
     ///Hovering:
     /// all motors have a fixed throttle setting between 1000 and 2000
     /// we check pitch, roll then yaw
@@ -245,19 +257,20 @@ void loop() {
     /// could do every 0.1 degree for 1 point increase, gives 900 points out of our 1000 range
     ///     However throttle will probs be 300 degrees so we are going over, but probs will never see > 30 degrees, so 300 puts us at comfortable 600
 
-
-
-    //getBatteryValues();
     //Serial.println(voltage);
     //Serial.println(amps);
-
-
+    //Serial.println(currentTime - lastMessageTime);
+    /*
+    if(currentTime - lastMessageTime > 1250){
+        char data [40];
+        sprintf(data,"%d,%d,%f,%f,%f,%f",heightFilter.GetFiltered(), throttle, pitchVal, rollVal, voltage, amps);
+        Serial.println(data);
+        RadioConnection.println(data);
+        lastMessageTime = currentTime;
+    }
+     */
 }
 
-static int FMC(struct pt *pt)
-{
-    PT_BEGIN(pt);
-    while(1) {
         ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED, QLanded
         ///We will have a single variable take a value relating to each mode, and at the start of the loop the system will check the variable
         ///For mode switches, We can simply halt the running protothread with the old mode and start the new protothread
@@ -301,42 +314,6 @@ static int FMC(struct pt *pt)
         ///     ??? send help
         ///     Work in pairs of motors, 1+4+5 and 2+3+6, decrease one set and increase one set to induce torque on the body
 
-        newAttitude = getAttitude();
-        Serial.println(newAttitude.pitch);
-        Serial.println("P, ");
-        Serial.println(newAttitude.roll);
-        Serial.println("R, ");
-        Serial.println(newAttitude.yaw);
-        Serial.println("Y\n");
-        Serial.print(newAttitude.verticalA);
-        Serial.println("V, ");
-        Serial.print(newAttitude.directionalA);
-        Serial.println("D, ");
-        Serial.print(newAttitude.lateralA);
-        Serial.println("L, ");
-        Serial.println("\n");
-
-        PT_SLEEP(pt,50);
-    }
-    PT_END(pt)
-}
-static int ProtoThread2(struct pt *pt)
-{
-    PT_BEGIN(pt);
-    while(1) {
-        Serial.println("Printing every 5 seconds");
-        PT_SLEEP(pt,5000)
-    }
-    PT_END(pt);
-}
-static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS){
-    PT_BEGIN(pt);
-    while(1) {
-        getCoords(array);
-        PT_SLEEP(pt,1000)
-    }
-    PT_END(pt)
-}
 
 
 ///Notes:
@@ -355,22 +332,17 @@ static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS){
 /// On start, wait until the GPS is acquired before taking flights
 
 void startRadio(){
-   E220 radioModule(&RadioConnection, m0, m1, aux);
-    while(!radioModule.init()){
-        delay(5000);
-    }
-    Serial.println("Radio Ready");
+
 
 }
 
 void startGPS(){
-    Serial1.begin(9600);
     getCoords(coords);
     //if there is no satellites, no valid fix can be made thus retry
     while(coords[0] < 1) {
         getCoords(coords);
     }
-    Serial.println("GPS Started");
+    RadioConnection.println("GPS Started");
     lastFix[0] = coords[2];
     lastFix[1] = coords[3];
 }
@@ -394,11 +366,11 @@ void getCoords(float array[]){
 
 void altimeterInit(){
     while(!bmp.begin(0x76)){
-        Serial.println(F("Could not find a valid BMP280 sensor, check wiring or "
+        RadioConnection.println(F("Could not find a valid BMP280 sensor, check wiring or "
                          "try a different address!\n\n"));
         delay(5000);
     }
-    Serial.println("Altimeter Started");
+    RadioConnection.println("Altimeter Started");
 }
 
 float getAltitude(){
@@ -435,7 +407,7 @@ void startGyro(){
     double offsetD = 0;
     double offsetL = 0;
     if (!mpu.begin()) {
-        Serial.println("Failed to find MPU6050 chip");
+        RadioConnection.println("Failed to find MPU6050 chip");
         delay(1000);
         startGyro();
     }
@@ -465,7 +437,7 @@ void startGyro(){
     verticalOffset = offsetV/10;
     directionalOffset = offsetD/10;
     lateralOffset = offsetL/10;
-    Serial.println("Gyro Started");
+    RadioConnection.println("Gyro Started");
 }
 
 attitude getAttitude(){
@@ -536,7 +508,6 @@ void getUltrasonic(){
     duration = pulseIn(heightEcho, HIGH);
     //calculate distance by the delay
     distance = duration * 0.034 / 2;
-    Serial.println(distance);
     heightFilter.AddValue(distance);
     //Ideally we are running all the US sensors in this window due to the required 15us wait time
 }
@@ -555,6 +526,7 @@ void idleAll(){
    motor_4.writeMicroseconds(1000);
    motor_5.writeMicroseconds(1000);
    motor_6.writeMicroseconds(1000);
+   RadioConnection.println("IDLE SET");
 }
 
 
@@ -662,7 +634,19 @@ void setSpeed(){
     Serial.println(T5);
     Serial.println(T6);
     Serial.println();
+    if(T1 < 1000){T1 = 1050;}
+    if(T2 < 1000){T2 = 1050;}
+    if(T3 < 1000){T3 = 1050;}
+    if(T4 < 1000){T4 = 1050;}
+    if(T5 < 1000){T5 = 1050;}
+    if(T6 < 1000){T6 = 1050;}
 
+    if(T1 > 2000){T1 = 2000;}
+    if(T2 > 2000){T2 = 2000;}
+    if(T3 > 2000){T3 = 2000;}
+    if(T4 > 2000){T4 = 2000;}
+    if(T5 > 2000){T5 = 2000;}
+    if(T6 > 2000){T6 = 2000;}
     motor_1.writeMicroseconds(T1);
     motor_2.writeMicroseconds(T2);
     motor_3.writeMicroseconds(T3);
@@ -678,26 +662,25 @@ void setSpeed(){
     T6 = 0;
 }
 void test(){
-    Serial.println("Starting Test....");
+    RadioConnection.println("Starting Test....");
     delay(5000);
-    Serial.println("Start: ");
     digitalWrite(LED_BUILTIN, HIGH);
     motor_1.writeMicroseconds(1050);
-    delay(500);
     motor_2.writeMicroseconds(1050);
-    delay(500);
     motor_3.writeMicroseconds(1050);
-    delay(500);
     motor_4.writeMicroseconds(1050);
-    delay(500);
     motor_5.writeMicroseconds(1050);
-    delay(500);
     motor_6.writeMicroseconds(1050);
     delay(2000);
+    motor_1.writeMicroseconds(1000);
+    motor_2.writeMicroseconds(1000);
+    motor_3.writeMicroseconds(1000);
+    motor_4.writeMicroseconds(1000);
+    motor_5.writeMicroseconds(1000);
+    motor_6.writeMicroseconds(1000);
     digitalWrite(LED_BUILTIN, LOW);
-    idleAll();
-    Serial.println("Test completed");
-    delay(60000);
+    delay(1500);
+    RadioConnection.println("Test completed");
 }
 ///LIGHTS
 ///Nav lights do not blink, red and green
