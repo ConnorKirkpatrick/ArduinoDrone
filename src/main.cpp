@@ -11,10 +11,6 @@
 #include "math.h"
 
 
-//static struct pt pt1;
-//static struct pt pt2;
-//static struct pt gpsThread;
-
 static int FMC(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
 static int GPSThread(struct pt *pt,float array[], TinyGPSPlus GPS);
@@ -141,16 +137,11 @@ void setSpeed();
 
 int flightMode = 0;
 
-
-void startRadio();
-
-
 void idleAll();
 void writeAll(int speed);
 
 void setup()
 {
-    delay(5000);
     Serial.begin(9600);
     Serial1.begin(9600);
     Serial2.begin(9600);
@@ -163,18 +154,17 @@ void setup()
         delay(5000);
     }
     RadioConnection.println("Radio Ready");
+    delay(1000);
     //setup the motors, set to idle
+    idleAll();
     motor_1.attach(5);
     motor_2.attach(4);
     motor_3.attach(7);
     motor_4.attach(2);
     motor_5.attach(6);
     motor_6.attach(3);
-    idleAll();
     RadioConnection.println("MOTORS READY");
-    delay(5000);
-    test();
-    /*
+
     //Start the gps
     ///startGPS();
     //Start the Altimeter, check its connected
@@ -190,14 +180,13 @@ void setup()
 
     RadioConnection.println("SYSTEM INITIALISED");
     lastMessageTime = millis();
-     */
+
 }
 
 
 
 
 void loop() {
-    /*
     currentTime = millis();
     ///always radio first, read one loop, act on it the next loop
     if(RadioConnection.available()){
@@ -231,7 +220,7 @@ void loop() {
     getUltrasonic();
 
     getBatteryValues();
-    /*
+
     if(flightMode == 1){
         ///decimal rounding
         pitchVal = (float)(round(currentAttitude.pitch*10))/10;
@@ -243,7 +232,7 @@ void loop() {
         //yaw(yawVal);
         setThrottle();
     }
-    */
+
     ///Hovering:
     /// all motors have a fixed throttle setting between 1000 and 2000
     /// we check pitch, roll then yaw
@@ -260,7 +249,7 @@ void loop() {
     //Serial.println(voltage);
     //Serial.println(amps);
     //Serial.println(currentTime - lastMessageTime);
-    /*
+
     if(currentTime - lastMessageTime > 1250){
         char data [40];
         sprintf(data,"%d,%d,%f,%f,%f,%f",heightFilter.GetFiltered(), throttle, pitchVal, rollVal, voltage, amps);
@@ -268,7 +257,7 @@ void loop() {
         RadioConnection.println(data);
         lastMessageTime = currentTime;
     }
-     */
+
 }
 
         ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED, QLanded
@@ -331,10 +320,6 @@ void loop() {
 /// Use the static GPS object to query for the coords at a more reasonable interval
 /// On start, wait until the GPS is acquired before taking flights
 
-void startRadio(){
-
-
-}
 
 void startGPS(){
     getCoords(coords);
@@ -539,14 +524,10 @@ void pitch(float pitchVal){
 
     //adjust forward
     int newSpeed = throttle - adjustment;
-    if (newSpeed < 1050) { newSpeed = 1050; }
-    if (newSpeed > 2000) { newSpeed = 2000; }
     T1 = T1 + newSpeed;
     T2 = T2 + newSpeed;
     //adjust rear
     newSpeed = throttle + adjustment;
-    if (newSpeed < 1050) { newSpeed = 1050; }
-    if (newSpeed > 2000) { newSpeed = 2000; }
     T5 = T5 + newSpeed;
     T6 = T6 + newSpeed;
 
@@ -560,15 +541,11 @@ void roll(float rollValue){
     ///left motors are 1,3,5. Right are 2,4,6
     ///if pitched right, we add to right motors, subtract from left
     int newSpeed = throttle - adjustment;
-    if (newSpeed < 1050) { newSpeed = 1050; }
-    if (newSpeed > 2000) { newSpeed = 2000; }
     T1 = T1 + newSpeed;
     T3 = T3 + newSpeed;
     T5 = T5 + newSpeed;
 
     newSpeed = throttle + adjustment;
-    if (newSpeed < 1050) { newSpeed = 1050; }
-    if (newSpeed > 2000) { newSpeed = 2000; }
     T2 = T2 + newSpeed;
     T4 = T4 + newSpeed;
     T6 = T6 + newSpeed;
@@ -579,7 +556,6 @@ void setThrottle(){
     ///we check the current alt vs the desired alt
     ///if current is outside of desired +- 10 we make a change
     /// Ideally we reduce the speed when we are close to the desired alt to have some form of curve
-    desiredHeight ;
     int currentHeight = heightFilter.GetFiltered();
     //we are below desired height
     if(currentHeight < desiredHeight - 10){
@@ -615,6 +591,12 @@ void setThrottle(){
             throttle = throttle + 10;
         }
     }
+    if(throttle > 2000){
+        throttle = 2000;
+    }
+    if(throttle < 1000){
+        throttle = 1000;
+    }
 
 
 }
@@ -634,12 +616,12 @@ void setSpeed(){
     Serial.println(T5);
     Serial.println(T6);
     Serial.println();
-    if(T1 < 1000){T1 = 1050;}
-    if(T2 < 1000){T2 = 1050;}
-    if(T3 < 1000){T3 = 1050;}
-    if(T4 < 1000){T4 = 1050;}
-    if(T5 < 1000){T5 = 1050;}
-    if(T6 < 1000){T6 = 1050;}
+    if(T1 < 1050){T1 = 1050;}
+    if(T2 < 1050){T2 = 1050;}
+    if(T3 < 1050){T3 = 1050;}
+    if(T4 < 1050){T4 = 1050;}
+    if(T5 < 1050){T5 = 1050;}
+    if(T6 < 1050){T6 = 1050;}
 
     if(T1 > 2000){T1 = 2000;}
     if(T2 > 2000){T2 = 2000;}
@@ -647,6 +629,7 @@ void setSpeed(){
     if(T4 > 2000){T4 = 2000;}
     if(T5 > 2000){T5 = 2000;}
     if(T6 > 2000){T6 = 2000;}
+
     motor_1.writeMicroseconds(T1);
     motor_2.writeMicroseconds(T2);
     motor_3.writeMicroseconds(T3);
@@ -687,4 +670,7 @@ void test(){
 ///Anti-collision do blink, red or white
 
 
-//TODO: query x times per second, remove outliers, take average
+///TODO: REDUCE MOTOR SENSITIVITY
+    //Add code to allow for the system to see a change before it executes the next update
+    //work on hovering code before anything else
+    //limit throttle to about 1200
