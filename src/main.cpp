@@ -35,6 +35,7 @@ Servo motor_6;
 
 //setup the throttle values
 int throttle = 1000; //arming value
+int throttleLim = 1200;
 
 int T1 = 0;
 int T2 = 0;
@@ -45,7 +46,6 @@ int T6 = 0;
 void test();
 //Setup the lora radio for telemetry, command and control
 Stream &RadioConnection = (Stream &)Serial2;
-//Stream &RadioConnection = (Stream &)Serial;
 String message;
 #define m0 8
 #define m1 9
@@ -80,16 +80,10 @@ struct attitude{
     double pitch;
     double roll;
     double yaw;
-    double verticalA;
-    double lateralA;
-    double directionalA;
-} currentAttitude, calibrationAttitude, newAttitude;
+} currentAttitude, calibrationAttitude, oldAttitude;
 double pitchOffset = 0;
 double rollOffset = 0;
 double yawOffset = 0;
-double verticalOffset = 0;
-double directionalOffset = 0;
-double lateralOffset = 0;
 float pitchVal;
 float rollVal;
 float yawVal;
@@ -125,13 +119,14 @@ void getBatteryValues();
 
 
 ///flight control
-void pitch(float pitchVal);
-void roll(float rollVal);
-
+void pitch(float pitchVal,float oldPitch);
+int pitchAdjust = 0;
+void roll(float rollVal, float oldRoll);
+int rollAdjust = 0;
 
 void setThrottle();
-int desiredHeight = 15;
-int oldHeight = 0;
+int desiredHeight ;
+int oldHeight;
 
 void setSpeed();
 
@@ -178,8 +173,11 @@ void setup()
     pinMode(voltPin, INPUT);
     getBatteryValues();
 
-    RadioConnection.println("SYSTEM INITIALISED");
+    oldAttitude = getAttitude();
     lastMessageTime = millis();
+
+    RadioConnection.println("SYSTEM INITIALISED");
+
 
 }
 
@@ -188,11 +186,9 @@ void setup()
 
 void loop() {
     currentTime = millis();
-    ///always radio first, read one loop, act on it the next loop
     if(RadioConnection.available()){
         message = RadioConnection.readString();
     }
-
     if(message.equals("Start\n")){
         RadioConnection.println("Starting flight");
         flightMode = 1;
@@ -202,6 +198,12 @@ void loop() {
         desiredHeight = message.substring(message.indexOf("setHeight")+9).toInt();
         RadioConnection.write("New height set to: ");
         RadioConnection.println(desiredHeight);
+        message = "";
+    }
+    else if(message.indexOf("setLim") > -1){
+        throttleLim = message.substring(message.indexOf("setLim")+6).toInt();
+        RadioConnection.write("New Limit set to: ");
+        RadioConnection.println(throttleLim);
         message = "";
     }
     else if(message.equals("end\n")){
@@ -216,21 +218,41 @@ void loop() {
         test();
     }
 
+
+
+    ///Ping the sensor for 3 attitude readings, then average them out for our use
     currentAttitude = getAttitude();
+    pitchVal = (float)(round(currentAttitude.pitch*10))/10;
+    rollVal = (float)(round(currentAttitude.roll*10))/10;
+    yawVal = (float)(round(currentAttitude.yaw*10))/10;
+    currentAttitude = getAttitude();
+    pitchVal = pitchVal+((float)(round(currentAttitude.pitch*10))/10);
+    rollVal = rollVal+((float)(round(currentAttitude.roll*10))/10);
+    yawVal = yawVal+((float)(round(currentAttitude.yaw*10))/10);
+    currentAttitude = getAttitude();
+    pitchVal = (pitchVal+((float)(round(currentAttitude.pitch*10))/10))/3;
+    rollVal = (rollVal+((float)(round(currentAttitude.roll*10))/10))/3;
+    yawVal = (yawVal+((float)(round(currentAttitude.yaw*10))/10))/3;
+
+    ///ping the ultrasonic sensor for 5 readings to refresh the average buffer
+    getUltrasonic();
+    getUltrasonic();
+    getUltrasonic();
+    getUltrasonic();
     getUltrasonic();
 
     getBatteryValues();
 
     if(flightMode == 1){
-        ///decimal rounding
-        pitchVal = (float)(round(currentAttitude.pitch*10))/10;
-        rollVal = (float)(round(currentAttitude.roll*10))/10;
-        yawVal = (float)(round(currentAttitude.yaw*10))/10;
-        pitch(pitchVal);
-        roll(rollVal);
+        //todo: Attitude delta values
+        pitch(pitchVal,oldAttitude.pitch);
+        roll(rollVal,oldAttitude.roll);
+        //yaw(yawVal,oldAttitude.yaw);
         setSpeed();
-        //yaw(yawVal);
         setThrottle();
+        oldAttitude.pitch = pitchVal;
+        oldAttitude.roll = rollVal;
+        oldAttitude.yaw = yawVal;
     }
 
     ///Hovering:
@@ -256,6 +278,7 @@ void loop() {
         Serial.println(data);
         RadioConnection.println(data);
         lastMessageTime = currentTime;
+        RadioConnection.println(analogRead(ampPin));
     }
 
 }
@@ -408,29 +431,18 @@ void startGyro(){
         offsetP = offsetP + calibrationAttitude.pitch;
         offsetR = offsetR + calibrationAttitude.roll;
         offsetY = offsetY + calibrationAttitude.yaw;
-
-        offsetV = offsetV + calibrationAttitude.verticalA;
-        offsetD = offsetD + calibrationAttitude.directionalA;
-        offsetL = offsetL + calibrationAttitude.lateralA;
         delay(100);
 
     }
     pitchOffset = offsetP/10;
     rollOffset = offsetR/10;
     yawOffset = offsetY/10;
-
-    verticalOffset = offsetV/10;
-    directionalOffset = offsetD/10;
-    lateralOffset = offsetL/10;
     RadioConnection.println("Gyro Started");
 }
 
 attitude getAttitude(){
     sensors_event_t a, g, temp;
     mpu.getEvent(&a, &g, &temp);
-    currentAttitude.verticalA = a.acceleration.z - verticalOffset;
-    currentAttitude.lateralA = a.acceleration.y - lateralOffset;
-    currentAttitude.directionalA = a.acceleration.x - directionalOffset;
     double x;
     double y;
     double z;
@@ -514,49 +526,96 @@ void idleAll(){
    RadioConnection.println("IDLE SET");
 }
 
-
-
-///ATTITUDE CONTROL
-void pitch(float pitchVal){
-    int adjustment =pitchVal*10;
-    ///if pitch is positive, we add to rear, subtract from front
-    ///Front motors are 1,2, rear are 5,6; we use equal change
-
-    //adjust forward
-    int newSpeed = throttle - adjustment;
-    T1 = T1 + newSpeed;
-    T2 = T2 + newSpeed;
-    //adjust rear
-    newSpeed = throttle + adjustment;
-    T5 = T5 + newSpeed;
-    T6 = T6 + newSpeed;
-
-    T3 = T3 + throttle;
-    T4 = T4 + throttle;
+float mag(float value){
+    return sqrt(sq(value));
 }
 
-void roll(float rollValue){
-    int adjustment = rollValue*10;
+///ATTITUDE CONTROL
+void pitch(float pitchVal, float oldPitch){
+    //check the delta,
+    if(mag(pitchVal) < mag(oldPitch)){
+        ///lower magnitude means we are actively correcting, thus dont change the inputs
+    }
+    else{
+        ///we have a higher or equal mag, thus not correcting
+        if(pitchVal > 0){
+            pitchAdjust = pitchAdjust + 5;
+        }
+        else{
+            pitchAdjust = pitchAdjust - 5;
+        }
+        ///pitch is positive, we are nose high, thus decrease front and increase rear
+        int newSpeed = throttle - pitchAdjust;
+        T1 = T1 + newSpeed;
+        T2 = T2 + newSpeed;
+        newSpeed = throttle + pitchAdjust;
+        T5 = T5 + newSpeed;
+        T6 = T6 + newSpeed;
+
+        T3 = T3 + throttle;
+        T4 = T4 + throttle;
+    }
+}
+
+void roll(float rollValue, float oldRoll){
+    if(mag(pitchVal) < mag(oldRoll)){
+        ///lower magnitude means we are actively correcting, thus dont change the inputs
+    }
+    else{
+        ///we have a higher or equal mag, thus not correcting
+        if(rollValue > 0){
+            rollAdjust = rollAdjust + 5;
+        }
+        else{
+            rollAdjust = rollAdjust - 5;
+        }
+        ///roll is positive, we are rolling right, decrease left and increase right
+        int newSpeed = throttle - rollAdjust;
+        //left motors
+        T1 = T1 + newSpeed;
+        T3 = T3 + newSpeed;
+        T5 = T5 + newSpeed;
+        newSpeed = throttle + rollAdjust;
+        //right motors
+        T2 = T2 + newSpeed;
+        T4 = T4 + newSpeed;
+        T6 = T6 + newSpeed;
+    }
+
     ///rolling right is positive
     ///left motors are 1,3,5. Right are 2,4,6
     ///if pitched right, we add to right motors, subtract from left
-    int newSpeed = throttle - adjustment;
-    T1 = T1 + newSpeed;
-    T3 = T3 + newSpeed;
-    T5 = T5 + newSpeed;
-
-    newSpeed = throttle + adjustment;
-    T2 = T2 + newSpeed;
-    T4 = T4 + newSpeed;
-    T6 = T6 + newSpeed;
 
 }
 
 void setThrottle(){
-    ///we check the current alt vs the desired alt
-    ///if current is outside of desired +- 10 we make a change
-    /// Ideally we reduce the speed when we are close to the desired alt to have some form of curve
+    ///calculate height delta
     int currentHeight = heightFilter.GetFiltered();
+    if(currentHeight - oldHeight > 0){
+        ///we are currently accenting
+        if(currentHeight < desiredHeight){
+            ///we are correcting towards desired, thus do nothing
+        }
+        else{
+            ///we are not correcting, thus increase throttle
+            ///TODO: INCREASE
+        }
+    }
+    if(currentHeight - oldHeight == 0){
+        ///we are stable in the air, do nothing
+    }
+    else{
+        ///we are currently descending
+        if(currentHeight > desiredHeight){
+            ///we are correcting towards desired height, thus do nothing
+        }
+        else{
+            ///We are not correcting, thus increase throttle
+            ///TODO: INCREASE
+        }
+    }
+
+
     //we are below desired height
     if(currentHeight < desiredHeight - 10){
         Serial.println("Increasing power");
@@ -565,7 +624,7 @@ void setThrottle(){
             //do nothing as we are already ascending
         }
         else{
-            throttle = throttle + 50;
+            throttle = throttle + 10;
         }
     }
     //we are above desired height
@@ -576,7 +635,7 @@ void setThrottle(){
             //do nothing as we are already descending
         }
         else{
-            throttle = throttle - 50;
+            throttle = throttle - 10;
         }
     }
     //we are withing the bounds for the altitude
@@ -584,21 +643,20 @@ void setThrottle(){
         Serial.println("Fine Tuning");
         if(currentHeight > oldHeight){
             //we are ascending, reduce power
-            throttle = throttle - 10;
+            throttle = throttle - 5;
         }
         else if(currentHeight < oldHeight){
             //we are descending, increase power
-            throttle = throttle + 10;
+            throttle = throttle + 5;
         }
     }
-    if(throttle > 2000){
-        throttle = 2000;
+    if(throttle > throttleLim){
+        throttle = throttleLim;
     }
     if(throttle < 1000){
         throttle = 1000;
     }
-
-
+    oldHeight = currentHeight;
 }
 
 void setSpeed(){
@@ -623,12 +681,12 @@ void setSpeed(){
     if(T5 < 1050){T5 = 1050;}
     if(T6 < 1050){T6 = 1050;}
 
-    if(T1 > 2000){T1 = 2000;}
-    if(T2 > 2000){T2 = 2000;}
-    if(T3 > 2000){T3 = 2000;}
-    if(T4 > 2000){T4 = 2000;}
-    if(T5 > 2000){T5 = 2000;}
-    if(T6 > 2000){T6 = 2000;}
+    if(T1 > throttleLim){T1 = throttleLim;}
+    if(T2 > throttleLim){T2 = throttleLim;}
+    if(T3 > throttleLim){T3 = throttleLim;}
+    if(T4 > throttleLim){T4 = throttleLim;}
+    if(T5 > throttleLim){T5 = throttleLim;}
+    if(T6 > throttleLim){T6 = throttleLim;}
 
     motor_1.writeMicroseconds(T1);
     motor_2.writeMicroseconds(T2);
@@ -674,3 +732,5 @@ void test(){
     //Add code to allow for the system to see a change before it executes the next update
     //work on hovering code before anything else
     //limit throttle to about 1200
+    //fix analog pin for amps
+    //test at 1200 next
