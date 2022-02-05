@@ -598,7 +598,7 @@ void setThrottle(){
         }
         else{
             ///we are not correcting, thus increase throttle
-            ///TODO: INCREASE
+            throttle = throttle + 5;
         }
     }
     if(currentHeight - oldHeight == 0){
@@ -611,50 +611,15 @@ void setThrottle(){
         }
         else{
             ///We are not correcting, thus increase throttle
-            ///TODO: INCREASE
-        }
-    }
-
-
-    //we are below desired height
-    if(currentHeight < desiredHeight - 10){
-        Serial.println("Increasing power");
-        if(currentHeight > oldHeight){
-            oldHeight = currentHeight;
-            //do nothing as we are already ascending
-        }
-        else{
-            throttle = throttle + 10;
-        }
-    }
-    //we are above desired height
-    else if(currentHeight > desiredHeight + 10){
-        Serial.println("Decreasing power");
-        if(currentHeight < oldHeight){
-            oldHeight = currentHeight;
-            //do nothing as we are already descending
-        }
-        else{
-            throttle = throttle - 10;
-        }
-    }
-    //we are withing the bounds for the altitude
-    else{
-        Serial.println("Fine Tuning");
-        if(currentHeight > oldHeight){
-            //we are ascending, reduce power
-            throttle = throttle - 5;
-        }
-        else if(currentHeight < oldHeight){
-            //we are descending, increase power
             throttle = throttle + 5;
         }
     }
+    ///Manage the min and max possible settings for armed throttle
     if(throttle > throttleLim){
         throttle = throttleLim;
     }
-    if(throttle < 1000){
-        throttle = 1000;
+    if(throttle < 1050){
+        throttle = 1050;
     }
     oldHeight = currentHeight;
 }
@@ -667,13 +632,6 @@ void setSpeed(){
     T5 = T5/2;
     T6 = T6/2;
 
-    Serial.println(T1);
-    Serial.println(T2);
-    Serial.println(T3);
-    Serial.println(T4);
-    Serial.println(T5);
-    Serial.println(T6);
-    Serial.println();
     if(T1 < 1050){T1 = 1050;}
     if(T2 < 1050){T2 = 1050;}
     if(T3 < 1050){T3 = 1050;}
