@@ -610,7 +610,7 @@ void setThrottle(){
             throttle = throttle - 5;
         }
     }
-    else{
+    if (currentHeight - oldHeight < 0){
         ///we are currently descending
         if(currentHeight > desiredHeight){
             ///we are correcting towards desired height, thus do nothing
