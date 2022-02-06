@@ -230,10 +230,13 @@ void loop() {
     rollVal = rollVal+((float)(round(currentAttitude.roll*10))/10);
     yawVal = yawVal+((float)(round(currentAttitude.yaw*10))/10);
     currentAttitude = getAttitude();
-    pitchVal = (pitchVal+((float)(round(currentAttitude.pitch*10))/10))/3;
-    rollVal = (rollVal+((float)(round(currentAttitude.roll*10))/10))/3;
-    yawVal = (yawVal+((float)(round(currentAttitude.yaw*10))/10))/3;
+    pitchVal = (pitchVal+((float)(round(currentAttitude.pitch*10))/10));
+    rollVal = (rollVal+((float)(round(currentAttitude.roll*10))/10));
+    yawVal = (yawVal+((float)(round(currentAttitude.yaw*10))/10));
 
+    pitchVal = (float)(round(pitchVal/3));
+    rollVal = (float)(round(rollVal/3));
+    yawVal = (float)(round(yawVal/3));
     ///ping the ultrasonic sensor for 5 readings to refresh the average buffer
     getUltrasonic();
     getUltrasonic();
@@ -539,10 +542,10 @@ void pitch(float pitchVal, float oldPitch){
     else{
         ///we have a higher or equal mag, thus not correcting
         if(pitchVal > 0){
-            pitchAdjust = pitchAdjust + 5;
+            pitchAdjust = pitchAdjust + 2;
         }
         else{
-            pitchAdjust = pitchAdjust - 5;
+            pitchAdjust = pitchAdjust - 2;
         }
         ///pitch is positive, we are nose high, thus decrease front and increase rear
         int newSpeed = throttle - pitchAdjust;
@@ -564,10 +567,10 @@ void roll(float rollValue, float oldRoll){
     else{
         ///we have a higher or equal mag, thus not correcting
         if(rollValue > 0){
-            rollAdjust = rollAdjust + 5;
+            rollAdjust = rollAdjust + 2;
         }
         else{
-            rollAdjust = rollAdjust - 5;
+            rollAdjust = rollAdjust - 2;
         }
         ///roll is positive, we are rolling right, decrease left and increase right
         int newSpeed = throttle - rollAdjust;
