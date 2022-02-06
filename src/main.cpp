@@ -602,7 +602,13 @@ void setThrottle(){
         }
     }
     if(currentHeight - oldHeight == 0){
-        ///we are stable in the air, do nothing
+        ///we are stable in the air
+        if(currentHeight < desiredHeight){
+            throttle = throttle + 5;
+        }
+        if(currentHeight > desiredHeight){
+            throttle = throttle - 5;
+        }
     }
     else{
         ///we are currently descending
