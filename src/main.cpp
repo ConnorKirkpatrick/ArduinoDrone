@@ -49,7 +49,7 @@ Stream &RadioConnection = (Stream &)Serial2;
 String message;
 #define m0 8
 #define m1 9
-#define aux 13
+#define aux 22
 int lastMessageTime;
 int currentTime;
 
@@ -135,14 +135,22 @@ int flightMode = 0;
 void idleAll();
 void writeAll(int speed);
 
+
+volatile int pwm_value = 0;
+volatile int prev_time = 0;
+int RC_Throttle;
+void rising();
+void falling();
+
+
+
 void setup()
 {
     Serial.begin(9600);
     Serial1.begin(9600);
     Serial2.begin(9600);
     Serial.println("SYSTEM INITIALISING");
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN,LOW);
+    attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
     ///STARTUP CHECKLIST
     E220 radioModule(&RadioConnection, m0, m1, aux);
     while(!radioModule.init()){
@@ -159,7 +167,6 @@ void setup()
     motor_5.attach(6);
     motor_6.attach(3);
     RadioConnection.println("MOTORS READY");
-
     //Start the gps
     ///startGPS();
     //Start the Altimeter, check its connected
@@ -177,15 +184,14 @@ void setup()
     lastMessageTime = millis();
 
     RadioConnection.println("SYSTEM INITIALISED");
-
-
+    RadioConnection.println("ENABLE CONTROLLER");
 }
 
 
 
 
 void loop() {
-    currentTime = millis();
+
     if(RadioConnection.available()){
         message = RadioConnection.readString();
     }
@@ -225,10 +231,12 @@ void loop() {
     pitchVal = (float)(round(currentAttitude.pitch*10))/10;
     rollVal = (float)(round(currentAttitude.roll*10))/10;
     yawVal = (float)(round(currentAttitude.yaw*10))/10;
+    delay(50);
     currentAttitude = getAttitude();
     pitchVal = pitchVal+((float)(round(currentAttitude.pitch*10))/10);
     rollVal = rollVal+((float)(round(currentAttitude.roll*10))/10);
     yawVal = yawVal+((float)(round(currentAttitude.yaw*10))/10);
+    delay(50);
     currentAttitude = getAttitude();
     pitchVal = (pitchVal+((float)(round(currentAttitude.pitch*10))/10));
     rollVal = (rollVal+((float)(round(currentAttitude.roll*10))/10));
@@ -245,14 +253,19 @@ void loop() {
     getUltrasonic();
 
     getBatteryValues();
-
+    setThrottle();
     if(flightMode == 1){
         //todo: Attitude delta values
-        pitch(pitchVal,oldAttitude.pitch);
-        roll(rollVal,oldAttitude.roll);
+        //pitch(pitchVal,oldAttitude.pitch);
+        //roll(rollVal,oldAttitude.roll);
         //yaw(yawVal,oldAttitude.yaw);
+        T1 = throttle;
+        T2 = throttle;
+        T3 = throttle;
+        T4 = throttle;
+        T5 = throttle;
+        T6 = throttle;
         setSpeed();
-        setThrottle();
         oldAttitude.pitch = pitchVal;
         oldAttitude.roll = rollVal;
         oldAttitude.yaw = yawVal;
@@ -275,14 +288,18 @@ void loop() {
     //Serial.println(amps);
     //Serial.println(currentTime - lastMessageTime);
 
+    currentTime = millis();
+    //1250000
     if(currentTime - lastMessageTime > 1250){
         char data [40];
-        sprintf(data,"%d,%d,%f,%f,%f,%f",heightFilter.GetFiltered(), throttle, pitchVal, rollVal, voltage, amps);
-        Serial.println(data);
+        sprintf(data,"%d,%i,%f,%f,%f,%f",heightFilter.GetFiltered(), throttle, pitchVal, rollVal, voltage, amps);
+
         RadioConnection.println(data);
         lastMessageTime = currentTime;
-        RadioConnection.println(analogRead(ampPin));
+
     }
+
+
 
 }
 
@@ -425,8 +442,7 @@ void startGyro(){
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
-    delay(2000);
-
+    delay(500);
     //take 5 samples over a few seconds to get the default offsets
 
     for(int i = 0; i < 10; i++){
@@ -544,8 +560,11 @@ void pitch(float pitchVal, float oldPitch){
         if(pitchVal > 0){
             pitchAdjust = pitchAdjust + 2;
         }
-        else{
+        else if(pitchVal < 0){
             pitchAdjust = pitchAdjust - 2;
+        }
+        else{
+            pitchAdjust = 0;
         }
         ///pitch is positive, we are nose high, thus decrease front and increase rear
         int newSpeed = throttle - pitchAdjust;
@@ -569,8 +588,11 @@ void roll(float rollValue, float oldRoll){
         if(rollValue > 0){
             rollAdjust = rollAdjust + 2;
         }
-        else{
+        else if(rollValue < 0){
             rollAdjust = rollAdjust - 2;
+        }
+        else{
+            rollAdjust = 0;
         }
         ///roll is positive, we are rolling right, decrease left and increase right
         int newSpeed = throttle - rollAdjust;
@@ -592,6 +614,7 @@ void roll(float rollValue, float oldRoll){
 }
 
 void setThrottle(){
+    /*
     ///calculate height delta
     int currentHeight = heightFilter.GetFiltered();
     if(currentHeight - oldHeight > 0){
@@ -623,31 +646,48 @@ void setThrottle(){
             throttle = throttle + 5;
         }
     }
+    */
+    if(RC_Throttle < 1000){RC_Throttle = 1000;}
+    throttle = RC_Throttle;
+    //Serial.println(throttle);
     ///Manage the min and max possible settings for armed throttle
     if(throttle > throttleLim){
         throttle = throttleLim;
     }
+    /*
     if(throttle < 1050){
         throttle = 1050;
     }
     oldHeight = currentHeight;
+     */
+}
+
+void rising() {
+    attachInterrupt(digitalPinToInterrupt(12), falling, FALLING);
+    prev_time = micros();
+}
+void falling() {
+    attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
+    RC_Throttle = micros()-prev_time - 5;
 }
 
 void setSpeed(){
+    /*
     T1 = T1/2;
     T2 = T2/2;
     T3 = T3/2;
     T4 = T4/2;
     T5 = T5/2;
     T6 = T6/2;
-
+     */
+    /*
     if(T1 < 1050){T1 = 1050;}
     if(T2 < 1050){T2 = 1050;}
     if(T3 < 1050){T3 = 1050;}
     if(T4 < 1050){T4 = 1050;}
     if(T5 < 1050){T5 = 1050;}
     if(T6 < 1050){T6 = 1050;}
-
+    */
     if(T1 > throttleLim){T1 = throttleLim;}
     if(T2 > throttleLim){T2 = throttleLim;}
     if(T3 > throttleLim){T3 = throttleLim;}
