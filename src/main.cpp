@@ -5,11 +5,15 @@
 #include "Servo.h"
 
 #include <MedianFilterLib2.h>
-
+#include "../.pio//libdeps/due/Average//src/Average.h"
 #include "../.pio//libdeps/due/E220Lib/src/E220.h"
 
 #include "math.h"
 
+#include <Wire.h>
+#include <Adafruit_HMC5883_U.h>
+
+void(* resetFunc) (void) = 0;
 
 static int FMC(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
@@ -84,15 +88,28 @@ struct attitude{
 double pitchOffset = 0;
 double rollOffset = 0;
 double yawOffset = 0;
-float pitchVal;
-float rollVal;
-float yawVal;
+Average<int> pitchFilter(5);
+Average<int> rollFilter(5);
+
+float desiredPitch;
+float desiredRoll;
+float desiredYaw;
+
+float pitchTrim = 0;
+float rollTrim = 0;
+float yawTrim = 0;
+
 
 
 void startGyro();
 attitude getAttitude();
 
-
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+float magDeclanation = 0.19;
+void startCompass();
+int getHeading();
+int desiredHeading;
+int oldHeading;
 
 //define the objects for the ultrasonic sensors (Odd value is the trigger)
 #define heightTrigger 39
@@ -123,6 +140,13 @@ void pitch(float pitchVal,float oldPitch);
 int pitchAdjust = 0;
 void roll(float rollVal, float oldRoll);
 int rollAdjust = 0;
+void yaw(int heading);
+int yawAdjust = 0;
+
+int pitchIncrement = 50;
+int rollIncrement = 50;
+int yawIncrement = 25;
+
 
 void setThrottle();
 int desiredHeight ;
@@ -156,6 +180,8 @@ void setup()
     while(!radioModule.init()){
         delay(5000);
     }
+    radioModule.setBaud(UDR_115200, 1);
+    Serial2.begin(115200);
     RadioConnection.println("Radio Ready");
     delay(1000);
     //setup the motors, set to idle
@@ -170,9 +196,11 @@ void setup()
     //Start the gps
     ///startGPS();
     //Start the Altimeter, check its connected
-    altimeterInit();
+    //altimeterInit();
+    //RadioConnection.println("Altimeter Started");
     //start the gyro
     startGyro();
+    startCompass();
     startUltrasonic();
 
     //start battery monitor
@@ -182,6 +210,8 @@ void setup()
 
     oldAttitude = getAttitude();
     lastMessageTime = millis();
+    desiredHeading = getHeading();
+    oldHeading = desiredHeading;
 
     RadioConnection.println("SYSTEM INITIALISED");
     RadioConnection.println("ENABLE CONTROLLER");
@@ -191,7 +221,7 @@ void setup()
 
 
 void loop() {
-
+    int loopStart = millis();
     if(RadioConnection.available()){
         message = RadioConnection.readString();
     }
@@ -212,6 +242,12 @@ void loop() {
         RadioConnection.println(throttleLim);
         message = "";
     }
+    else if(message.indexOf("setHeading") > -1){
+        desiredHeading = message.substring(message.indexOf("setHeading")+10).toInt();
+        RadioConnection.write("New Heading set to: ");
+        RadioConnection.println(desiredHeading);
+        message = "";
+    }
     else if(message.equals("end\n")){
         RadioConnection.println("ENDING");
         flightMode = 0;
@@ -223,28 +259,23 @@ void loop() {
         message = "";
         test();
     }
+    else if(message.equals("reset\n")) { resetFunc();}
 
-
-
-    ///Ping the sensor for 3 attitude readings, then average them out for our use
-    currentAttitude = getAttitude();
-    pitchVal = (float)(round(currentAttitude.pitch*10))/10;
-    rollVal = (float)(round(currentAttitude.roll*10))/10;
-    yawVal = (float)(round(currentAttitude.yaw*10))/10;
-    delay(50);
-    currentAttitude = getAttitude();
-    pitchVal = pitchVal+((float)(round(currentAttitude.pitch*10))/10);
-    rollVal = rollVal+((float)(round(currentAttitude.roll*10))/10);
-    yawVal = yawVal+((float)(round(currentAttitude.yaw*10))/10);
-    delay(50);
-    currentAttitude = getAttitude();
-    pitchVal = (pitchVal+((float)(round(currentAttitude.pitch*10))/10));
-    rollVal = (rollVal+((float)(round(currentAttitude.roll*10))/10));
-    yawVal = (yawVal+((float)(round(currentAttitude.yaw*10))/10));
-
-    pitchVal = (float)(round(pitchVal/3));
-    rollVal = (float)(round(rollVal/3));
-    yawVal = (float)(round(yawVal/3));
+    //add 5 readings to the moving buffer to get the median
+    for(int i = 0; i < 2; i++){
+        currentAttitude = getAttitude();
+        pitchFilter.push(round(currentAttitude.pitch));
+        rollFilter.push(round(currentAttitude.roll));
+        Serial.println(round(currentAttitude.pitch));
+        Serial.println(round(currentAttitude.roll));
+        Serial.println("");
+        delay(5);
+    }
+    int pitchVal = pitchFilter.mode();
+    int rollVal = rollFilter.mode();
+    Serial.print(pitchVal);
+    Serial.print(", ");
+    Serial.println(rollVal);
     ///ping the ultrasonic sensor for 5 readings to refresh the average buffer
     getUltrasonic();
     getUltrasonic();
@@ -252,23 +283,29 @@ void loop() {
     getUltrasonic();
     getUltrasonic();
 
+    double heading = getHeading();
+    delay(10);
+    heading = heading + getHeading();
+    delay(10);
+    heading = (heading + getHeading())/3;
+    //offset heading , lets say we want 150.
+    //151 to 330 is positive, so we need to rotate left
+    //149 to 331 is negative, so we need to rotate right
+    // current heading - desired
+    // 100 - 150 = - 50, so rotate right
+    // 300 - 150 = + 150 so rotate left
+    // 150 + 180 = 330
+
     getBatteryValues();
     setThrottle();
     if(flightMode == 1){
-        //todo: Attitude delta values
-        //pitch(pitchVal,oldAttitude.pitch);
-        //roll(rollVal,oldAttitude.roll);
-        //yaw(yawVal,oldAttitude.yaw);
-        T1 = throttle;
-        T2 = throttle;
-        T3 = throttle;
-        T4 = throttle;
-        T5 = throttle;
-        T6 = throttle;
+        pitch(pitchVal,oldAttitude.pitch);
+        roll(rollVal,oldAttitude.roll);
+        yaw(heading);
         setSpeed();
         oldAttitude.pitch = pitchVal;
         oldAttitude.roll = rollVal;
-        oldAttitude.yaw = yawVal;
+        oldAttitude.yaw = heading;
     }
 
     ///Hovering:
@@ -284,21 +321,18 @@ void loop() {
     /// could do every 0.1 degree for 1 point increase, gives 900 points out of our 1000 range
     ///     However throttle will probs be 300 degrees so we are going over, but probs will never see > 30 degrees, so 300 puts us at comfortable 600
 
-    //Serial.println(voltage);
-    //Serial.println(amps);
-    //Serial.println(currentTime - lastMessageTime);
-
     currentTime = millis();
-    //1250000
     if(currentTime - lastMessageTime > 1250){
         char data [40];
-        sprintf(data,"%d,%i,%f,%f,%f,%f",heightFilter.GetFiltered(), throttle, pitchVal, rollVal, voltage, amps);
-
+        sprintf(data,"%i,%ld,%ld,%d,%f,%f,%f",throttle, pitchVal, rollVal,desiredHeading,heading, voltage, amps);
         RadioConnection.println(data);
+        sprintf(data,"%i,%i,%i",pitchAdjust,rollAdjust,yawAdjust);
+        RadioConnection.print(data);
         lastMessageTime = currentTime;
-
+        //rotates to the right, so right spinning (CW) motors are spinning faster than the CCW motors
     }
-
+    Serial.println(millis() - loopStart);
+    Serial.println("");
 
 
 }
@@ -344,7 +378,7 @@ void loop() {
         ///     Pairs of motors, 1+2 and 5+6 increase and decrease RPM inversely, to go forward, 1+2 drop by 2%, 5+6 increase by 2%
         ///Rotation:
         ///     ??? send help
-        ///     Work in pairs of motors, 1+4+5 and 2+3+6, decrease one set and increase one set to induce torque on the body
+        ///     Work in pairs of motors, 1+4+5(cw) and 2+3+6(ccw), decrease one set and increase one set to induce torque on the body
 
 
 
@@ -393,12 +427,17 @@ void getCoords(float array[]){
 }
 
 void altimeterInit(){
-    while(!bmp.begin(0x76)){
-        RadioConnection.println(F("Could not find a valid BMP280 sensor, check wiring or "
-                         "try a different address!\n\n"));
-        delay(5000);
+    if(!bmp.begin(0x77)){
+        delay(2000);
+        if (!bmp.begin(0x76)) {
+            RadioConnection.println(F("Could not find a valid BMP280 sensor, check wiring or "
+                                      "try a different address!\n\n"));
+            delay(5000);
+            altimeterInit();
+        }
+
     }
-    RadioConnection.println("Altimeter Started");
+
 }
 
 float getAltitude(){
@@ -436,13 +475,14 @@ void startGyro(){
     double offsetL = 0;
     if (!mpu.begin()) {
         RadioConnection.println("Failed to find MPU6050 chip");
+        mpu.reset();
         delay(1000);
         startGyro();
     }
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
     mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);
-    delay(500);
+    delay(5000);
     //take 5 samples over a few seconds to get the default offsets
 
     for(int i = 0; i < 10; i++){
@@ -508,6 +548,31 @@ attitude getAttitude(){
     return currentAttitude;
 }
 
+void startCompass(){
+    int initialHeading = getHeading();
+    while(initialHeading == NULL){
+        Serial.println("No HMC5883 detected ... Check your wiring!");
+        delay(2500);
+    }
+    RadioConnection.println("Compass Started");
+}
+
+int getHeading(){
+    sensors_event_t event;
+    mag.getEvent(&event);
+    float heading = atan2(event.magnetic.y, event.magnetic.x);
+    float declinationAngle = magDeclanation;
+    heading += declinationAngle;
+    // Correct for when signs are reversed.
+    if(heading < 0)
+        heading += 2*PI;
+    // Check for wrap due to addition of declination.
+    if(heading > 2*PI)
+        heading -= 2*PI;
+    // Convert radians to degrees for readability.
+    return(heading * 180/M_PI);
+
+}
 void startUltrasonic(){
     pinMode(heightTrigger, OUTPUT);
     pinMode(heightEcho, INPUT);
@@ -545,72 +610,124 @@ void idleAll(){
    RadioConnection.println("IDLE SET");
 }
 
-float mag(float value){
+float magnitude(float value){
     return sqrt(sq(value));
 }
 
 ///ATTITUDE CONTROL
 void pitch(float pitchVal, float oldPitch){
-    //check the delta,
-    if(mag(pitchVal) < mag(oldPitch)){
-        ///lower magnitude means we are actively correcting, thus dont change the inputs
+    if(pitchVal == desiredPitch){
+        ///set the pitch offset to 0
+        pitchAdjust = 0;
     }
     else{
-        ///we have a higher or equal mag, thus not correcting
-        if(pitchVal > 0){
-            pitchAdjust = pitchAdjust + 2;
+        if(magnitude(pitchVal) < magnitude(oldPitch)){
+            ///lower magnitude means we are actively correcting, thus dont change the inputs
         }
-        else if(pitchVal < 0){
-            pitchAdjust = pitchAdjust - 2;
+        else {
+            ///we have a higher or equal mag, thus not correcting
+            if (pitchVal > 0) { pitchAdjust = pitchAdjust + pitchIncrement;}
+            else if (pitchVal < 0) {pitchAdjust = pitchAdjust - pitchIncrement;}
         }
-        else{
-            pitchAdjust = 0;
-        }
-        ///pitch is positive, we are nose high, thus decrease front and increase rear
-        int newSpeed = throttle - pitchAdjust;
-        T1 = T1 + newSpeed;
-        T2 = T2 + newSpeed;
-        newSpeed = throttle + pitchAdjust;
-        T5 = T5 + newSpeed;
-        T6 = T6 + newSpeed;
-
-        T3 = T3 + throttle;
-        T4 = T4 + throttle;
     }
+    ///pitch is positive, we are nose high, thus decrease front and increase rear
+    int newSpeed = throttle - pitchAdjust + pitchTrim;
+    T1 = T1 + newSpeed;
+    T2 = T2 + newSpeed;
+    newSpeed = throttle + pitchAdjust + pitchTrim;
+    T5 = T5 + newSpeed;
+    T6 = T6 + newSpeed;
+
+    T3 = T3 + throttle;
+    T4 = T4 + throttle;
 }
 
 void roll(float rollValue, float oldRoll){
-    if(mag(pitchVal) < mag(oldRoll)){
-        ///lower magnitude means we are actively correcting, thus dont change the inputs
-    }
+    if(rollValue == desiredRoll){ rollAdjust = 0;}
     else{
-        ///we have a higher or equal mag, thus not correcting
-        if(rollValue > 0){
-            rollAdjust = rollAdjust + 2;
-        }
-        else if(rollValue < 0){
-            rollAdjust = rollAdjust - 2;
+        if(magnitude(rollValue) < magnitude(oldRoll)){
+            ///lower magnitude means we are actively correcting, thus dont change the inputs
         }
         else{
-            rollAdjust = 0;
+            ///we have a higher or equal mag, thus not correcting
+            if(rollValue > 0){ rollAdjust = rollAdjust + rollIncrement;}
+            else if(rollValue < 0){ rollAdjust = rollAdjust - rollIncrement;}
         }
-        ///roll is positive, we are rolling right, decrease left and increase right
-        int newSpeed = throttle - rollAdjust;
-        //left motors
-        T1 = T1 + newSpeed;
-        T3 = T3 + newSpeed;
-        T5 = T5 + newSpeed;
-        newSpeed = throttle + rollAdjust;
-        //right motors
-        T2 = T2 + newSpeed;
-        T4 = T4 + newSpeed;
-        T6 = T6 + newSpeed;
     }
-
+    ///roll is positive, we are rolling right, decrease left and increase right
+    int newSpeed = throttle - rollAdjust + rollTrim;
+    //left motors
+    T1 = T1 + newSpeed;
+    T3 = T3 + newSpeed;
+    T5 = T5 + newSpeed;
+    newSpeed = throttle + rollAdjust + rollTrim;
+    //right motors
+    T2 = T2 + newSpeed;
+    T4 = T4 + newSpeed;
+    T6 = T6 + newSpeed;
     ///rolling right is positive
     ///left motors are 1,3,5. Right are 2,4,6
     ///if pitched right, we add to right motors, subtract from left
 
+}
+
+void yaw(int currentHeading){
+    int flag = 2;
+    if(currentHeading == desiredHeading){yawAdjust = 0;}
+    else{
+        ///work out magnitude
+        if(magnitude(currentHeading - desiredHeading) < magnitude(oldHeading - desiredHeading)){
+            ///we are correcting, thus do nothing
+        }
+        else {
+            ///work out angles based on the desired heading
+            int value = desiredHeading - 180;
+            ///if value > 0 but less than 360 -> if the current is > value then we need to turn to the left
+            ///     if value > 0 and > 360, subtract 360 from value. if current < (value-360) or > desired turn left
+            ///if value < 0, subtract from 360. if current > (360-value) or value < desired turn right
+            if (value < 0) {
+                ///desired between 0 to 180
+                value = 360 + value;
+                if (currentHeading > value | currentHeading < desiredHeading) {
+                    ///turn left
+                    flag = 1;
+                } else {
+                    ///turn right
+                    flag = -1;
+                }
+            } else if (value >= 0) {
+                ///desired between 180 to 360
+                if (currentHeading < desiredHeading & currentHeading > value) {
+                    ///turn left
+                    flag = 1;
+                } else {
+                    ///turn right
+                    flag = -1;
+                }
+            }
+            ///+1 is left, -1 is right
+            ///1+4+5(cw) and 2+3+6(ccw)
+            if (flag > 0) {
+                ///left
+                yawAdjust = yawAdjust - yawIncrement;
+            } else if (flag < 0) {
+                ///Right
+                yawAdjust = yawAdjust + yawIncrement;
+            }
+        }
+    }
+    ///we need to turn right, so throttle is -2
+    int newSpeed = throttle + yawAdjust + yawTrim;
+    //left torque motors
+    T2 = T2 + newSpeed;
+    T3 = T3 + newSpeed;
+    T6 = T6 + newSpeed;
+    newSpeed = throttle - yawAdjust + yawTrim;
+    //right torque motors
+    T1 = T1 + newSpeed;
+    T4 = T4 + newSpeed;
+    T5 = T5 + newSpeed;
+    oldHeading = currentHeading;
 }
 
 void setThrottle(){
@@ -672,14 +789,13 @@ void falling() {
 }
 
 void setSpeed(){
-    /*
-    T1 = T1/2;
-    T2 = T2/2;
-    T3 = T3/2;
-    T4 = T4/2;
-    T5 = T5/2;
-    T6 = T6/2;
-     */
+
+    T1 = T1/3;
+    T2 = T2/3;
+    T3 = T3/3;
+    T4 = T4/3;
+    T5 = T5/3;
+    T6 = T6/3;
     /*
     if(T1 < 1050){T1 = 1050;}
     if(T2 < 1050){T2 = 1050;}
@@ -695,12 +811,22 @@ void setSpeed(){
     if(T5 > throttleLim){T5 = throttleLim;}
     if(T6 > throttleLim){T6 = throttleLim;}
 
-    motor_1.writeMicroseconds(T1);
-    motor_2.writeMicroseconds(T2);
-    motor_3.writeMicroseconds(T3);
-    motor_4.writeMicroseconds(T4);
-    motor_5.writeMicroseconds(T5);
-    motor_6.writeMicroseconds(T6);
+    if(throttle > 1000) {
+        motor_1.writeMicroseconds(T1);
+        motor_2.writeMicroseconds(T2);
+        motor_3.writeMicroseconds(T3);
+        motor_4.writeMicroseconds(T4);
+        motor_5.writeMicroseconds(T5);
+        motor_6.writeMicroseconds(T6);
+    }
+    else{
+        motor_1.writeMicroseconds(1000);
+        motor_2.writeMicroseconds(1000);
+        motor_3.writeMicroseconds(1000);
+        motor_4.writeMicroseconds(1000);
+        motor_5.writeMicroseconds(1000);
+        motor_6.writeMicroseconds(1000);
+    }
 
     T1 = 0;
     T2 = 0;
@@ -735,9 +861,5 @@ void test(){
 ///Anti-collision do blink, red or white
 
 
-///TODO: REDUCE MOTOR SENSITIVITY
-    //Add code to allow for the system to see a change before it executes the next update
-    //work on hovering code before anything else
-    //limit throttle to about 1200
-    //fix analog pin for amps
-    //test at 1200 next
+///TODO: CHECK MOTOR SETTINGS
+    ///currently running 3 seconds on then dropping 1 second off
