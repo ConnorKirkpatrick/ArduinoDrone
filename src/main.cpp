@@ -41,15 +41,16 @@ Servo motor_6;
 int throttle = 1000; //arming value
 int throttleLim = 1200;
 
-int T1 = 0;
-int T2 = 0;
-int T3 = 0;
-int T4 = 0;
-int T5 = 0;
-int T6 = 0;
+int esc_1 = 0;
+int esc_2 = 0;
+int esc_3 = 0;
+int esc_4 = 0;
+int esc_5 = 0;
+int esc_6 = 0;
+
 void test();
 //Setup the lora radio for telemetry, command and control
-Stream &RadioConnection = (Stream &)Serial2;
+Stream &RadioConnection = (Stream &)Serial;
 String message;
 #define m0 8
 #define m1 9
@@ -76,10 +77,6 @@ void getCoords(float array[]);
 
 //Motion processing unit, our gyroscope
 Adafruit_MPU6050 mpu;
-//adjustments for the MPU
-double adjust_x = -8.26;
-double adjust_y = -2.55;
-double adjust_z = 0;
 struct attitude{
     double pitch;
     double roll;
@@ -142,11 +139,33 @@ void roll(float rollVal, float oldRoll);
 int rollAdjust = 0;
 void yaw(int heading);
 int yawAdjust = 0;
-
-int pitchIncrement = 50;
-int rollIncrement = 50;
-int yawIncrement = 25;
-
+//PID Params
+float pGainPitch = 0.5;
+float iGainPitch = 0.5;
+float dGainPitch = 0.27;
+float pGainRoll = 0.45;
+float iGainRoll = 0.45;
+float dGainRoll = 0.25;
+//Pitch PID
+int pitchCurrentTime = 0;
+int pitchOldTime = 0;
+void pitchPID(double currentPitch);
+long pitchPorportional = 0;
+long pitchLastError = 0;
+long pitchIntegral = 0;
+long pitchDerivitive= 0;
+//roll PID
+void rollPID(double currentRoll);
+long rollPorportional = 0;
+long rollLastError = 0;
+long rollIntegral = 0;
+long rollDerivitive= 0;
+//yaw PID
+void yawPID(double currentYaw);
+long yawPorportional = 0;
+long yawLastError = 0;
+long yawIntegral = 0;
+long yawDerivitive= 0;
 
 void setThrottle();
 int desiredHeight ;
@@ -166,8 +185,6 @@ int RC_Throttle;
 void rising();
 void falling();
 
-
-
 void setup()
 {
     Serial.begin(9600);
@@ -176,23 +193,26 @@ void setup()
     Serial.println("SYSTEM INITIALISING");
     attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
     ///STARTUP CHECKLIST
+    /*
     E220 radioModule(&RadioConnection, m0, m1, aux);
     while(!radioModule.init()){
+        Serial.println("Waiting for radio");
         delay(5000);
     }
-    radioModule.setBaud(UDR_115200, 1);
-    Serial2.begin(115200);
+     */
     RadioConnection.println("Radio Ready");
     delay(1000);
     //setup the motors, set to idle
     idleAll();
-    motor_1.attach(5);
-    motor_2.attach(4);
-    motor_3.attach(7);
-    motor_4.attach(2);
-    motor_5.attach(6);
-    motor_6.attach(3);
+    //motor_1.attach(5);
+    //motor_2.attach(4);
+    //motor_3.attach(7);
+    //motor_4.attach(2);
+    //motor_5.attach(6);
+    //motor_6.attach(3);
     RadioConnection.println("MOTORS READY");
+
+
     //Start the gps
     ///startGPS();
     //Start the Altimeter, check its connected
@@ -201,7 +221,7 @@ void setup()
     //start the gyro
     startGyro();
     startCompass();
-    startUltrasonic();
+    //startUltrasonic();
 
     //start battery monitor
     pinMode(ampPin, INPUT);
@@ -215,12 +235,129 @@ void setup()
 
     RadioConnection.println("SYSTEM INITIALISED");
     RadioConnection.println("ENABLE CONTROLLER");
+
+    flightMode = 1;
 }
 
 
 
 
 void loop() {
+    if(RadioConnection.available()){
+        message = RadioConnection.readString();
+    }
+    if(message.equals("Start\n")){
+        RadioConnection.println("Starting flight");
+        flightMode = 1;
+        message = "";
+    }
+    else if(message.equals("end\n")){
+        RadioConnection.println("ENDING");
+        flightMode = 0;
+        idleAll();
+        message = "";
+    }
+
+    currentAttitude = getAttitude();
+
+    if(RC_Throttle < 1000){RC_Throttle = 1000;}
+    throttle = RC_Throttle;
+
+    getBatteryValues();
+    int battery_voltage = voltage;
+    pitchPID(currentAttitude.pitch);
+    rollPID(currentAttitude.roll);
+    Serial.println(pitchAdjust);
+    Serial.println(rollAdjust);
+    Serial.println("");
+    /*
+
+    if (flightMode == 1){                                                       //The motors are started.
+        if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
+
+
+
+
+        //read battery voltage 12.40v as 1240
+        if (battery_voltage < 1240 && battery_voltage > 800){                   //Is the battery connected?
+            esc_1 += esc_1 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-1 pulse for voltage drop.
+            esc_2 += esc_2 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-2 pulse for voltage drop.
+            esc_3 += esc_3 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-3 pulse for voltage drop.
+            esc_4 += esc_4 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-4 pulse for voltage drop.
+            esc_5 += esc_5 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-5 pulse for voltage drop.
+            esc_6 += esc_6 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-6 pulse for voltage drop.
+        }
+
+        if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
+        if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
+        if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
+        if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+        if (esc_5 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+        if (esc_6 < 1100) esc_4 = 1100;                                         //Keep the motors running.
+
+        if(esc_1 > 2000)esc_1 = 2000;                                           //Limit the esc-1 pulse to 2000us.
+        if(esc_2 > 2000)esc_2 = 2000;                                           //Limit the esc-2 pulse to 2000us.
+        if(esc_3 > 2000)esc_3 = 2000;                                           //Limit the esc-3 pulse to 2000us.
+        if(esc_4 > 2000)esc_4 = 2000;                                           //Limit the esc-4 pulse to 2000us.
+        if(esc_5 > 2000)esc_5 = 2000;                                           //Limit the esc-4 pulse to 2000us.
+        if(esc_6 > 2000)esc_6 = 2000;                                           //Limit the esc-4 pulse to 2000us.
+    }
+
+    else{
+        esc_1 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-1.
+        esc_2 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-2.
+        esc_3 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-3.
+        esc_4 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-4.
+        esc_5 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-5.
+        esc_6 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-6.
+    }
+     */
+    //char data [40];
+    //sprintf(data,"%i,%d,%d,%d,%d,%d,%f",esc_1, esc_2, esc_3,esc_4,esc_5, esc_6, voltage);
+    //Serial.println(data);
+}
+//pitch forward PID value is positive
+void pitchPID(double currentPitch){
+    pitchCurrentTime = millis();
+    //instantaneous error
+    pitchPorportional = (desiredPitch - currentPitch) * pGainPitch;
+    //Integral
+    pitchIntegral += (pitchPorportional*(pitchCurrentTime - pitchOldTime)) * iGainPitch;
+    //derivative
+    pitchDerivitive = ((pitchPorportional - pitchLastError) * (pitchCurrentTime - pitchOldTime)) * dGainPitch;
+    pitchLastError = pitchPorportional;
+    pitchOldTime = pitchCurrentTime;
+    pitchAdjust = pitchPorportional + pitchIntegral + pitchDerivitive;
+}
+void rollPID(double currentroll){
+    //instantaneous error
+    rollPorportional = (desiredRoll - currentroll) * pGainRoll;
+    //Integral
+    rollIntegral += rollPorportional * iGainRoll;
+    rollDerivitive = (rollPorportional - rollLastError) * dGainRoll;
+    rollLastError = rollPorportional;
+    rollAdjust = rollPorportional + rollIntegral + rollDerivitive;
+}
+void yawPID(double currentyaw){
+    //instantaneous error
+    yawPorportional = desiredHeading - currentyaw;
+    //Integral
+    yawIntegral += yawPorportional;
+    yawDerivitive = yawPorportional - yawLastError;
+    yawLastError = yawPorportional;
+    yawAdjust = yawPorportional + yawIntegral + yawDerivitive;
+}
+///Calculate the motor speeds
+/* Decide whether to use timing or not
+ * Pitch, roll and yaw provide some value
+ * value range is between +- 500(?), if value is over set it to be 500
+ * combine the pitch/roll/yaw values with the throttle setting
+ *
+ * Possibly move the altimeter to the second I2C channel due to interference, or just redo the wiring
+ */
+
+
+    /*
     int loopStart = millis();
     if(RadioConnection.available()){
         message = RadioConnection.readString();
@@ -333,9 +470,9 @@ void loop() {
     }
     Serial.println(millis() - loopStart);
     Serial.println("");
+    */
 
 
-}
 
         ///the FMC will have x modes, TAKE OFF, HOVER, NAVIGATE TO, LAND, LANDED, QLanded
         ///We will have a single variable take a value relating to each mode, and at the start of the loop the system will check the variable
@@ -522,26 +659,18 @@ attitude getAttitude(){
     xAng = map(AcX,minVal,maxVal,-90,90);
     yAng = map(AcY,minVal,maxVal,-90,90);
     zAng = map(AcZ,minVal,maxVal,-90,90);
-    x= (RAD_TO_DEG * (atan2(-yAng, -zAng)+PI))-adjust_x;
-    y= (RAD_TO_DEG * (atan2(-xAng, -zAng)+PI))-adjust_y;
-    z= (RAD_TO_DEG * (atan2(-yAng, -xAng)+PI))-adjust_z;
-    if(x>=360){x = x-360;}
-    if(y>=360){y = y-360;}
-    if(z>=360){z = z-360;}
-    if(x<0){x = x+360;}
-    if(y<0){y = y+360;}
-    if(z<0){z = z+360;}
+    x= (RAD_TO_DEG * (atan2(-yAng, -zAng)+PI));
+    y= (RAD_TO_DEG * (atan2(-xAng, -zAng)+PI));
+    z= (RAD_TO_DEG * (atan2(-yAng, -xAng)+PI));
+    //x is roll
+    //y is pitch
+    //z is yaw
 
     x = x - rollOffset;
     y = y - pitchOffset;
     z = z - yawOffset;
-
-    if(x<= -180){x = 360+x;}
-    if(y<= -180){y = 360+y;}
-    if(z<= -180){z = 360+z;}
-
-    if(x > 180){x = x-360;}
-
+    if(x<-180){ x = 360 + x;}
+    if(y<-180){ y = 360 + y;}
     currentAttitude.pitch = y;
     currentAttitude.roll = x;
     currentAttitude.yaw = z;
@@ -596,6 +725,10 @@ void getUltrasonic(){
 void getBatteryValues(){
     amps = analogRead(ampPin)*ampScale;
     voltage = analogRead(voltPin)*voltScale;
+    if(voltage > 12.94){voltage = 12.94;}
+    voltage = map(voltage,11.8,12.94,1150,1250);
+    //11.8 is 11.5
+    //13.1 is 12.6
 }
 
 
@@ -610,10 +743,20 @@ void idleAll(){
    RadioConnection.println("IDLE SET");
 }
 
+void rising() {
+    attachInterrupt(digitalPinToInterrupt(12), falling, FALLING);
+    prev_time = micros();
+}
+void falling() {
+    attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
+    RC_Throttle = micros()-prev_time - 5;
+}
+
+
 float magnitude(float value){
     return sqrt(sq(value));
 }
-
+/*
 ///ATTITUDE CONTROL
 void pitch(float pitchVal, float oldPitch){
     if(pitchVal == desiredPitch){
@@ -763,7 +906,7 @@ void setThrottle(){
             throttle = throttle + 5;
         }
     }
-    */
+
     if(RC_Throttle < 1000){RC_Throttle = 1000;}
     throttle = RC_Throttle;
     //Serial.println(throttle);
@@ -776,7 +919,7 @@ void setThrottle(){
         throttle = 1050;
     }
     oldHeight = currentHeight;
-     */
+
 }
 
 void rising() {
@@ -803,7 +946,7 @@ void setSpeed(){
     if(T4 < 1050){T4 = 1050;}
     if(T5 < 1050){T5 = 1050;}
     if(T6 < 1050){T6 = 1050;}
-    */
+
     if(T1 > throttleLim){T1 = throttleLim;}
     if(T2 > throttleLim){T2 = throttleLim;}
     if(T3 > throttleLim){T3 = throttleLim;}
@@ -856,6 +999,7 @@ void test(){
     delay(1500);
     RadioConnection.println("Test completed");
 }
+ */
 ///LIGHTS
 ///Nav lights do not blink, red and green
 ///Anti-collision do blink, red or white
