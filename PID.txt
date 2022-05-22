@@ -1,0 +1,7 @@
+PID Control scheme
+output = pGain*(desiredAtt - currentAtt) + iGain*(totalError += (desiredAtt - currentAtt)) + dGain((desiredAtt - currentAtt) - lastAtt)
+
+need one PID controller for each Pitch, roll and yaw
+possibly we need to use some time functiuon for integrals and derivitives?
+  I => totalError += error * elapsedTime
+  D => ((desiredAtt - currentAtt) - lastAtt)/elapsedTime
