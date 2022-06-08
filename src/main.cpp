@@ -316,7 +316,7 @@ void loop() {
     //sprintf(data,"%i,%d,%d,%d,%d,%d,%f",esc_1, esc_2, esc_3,esc_4,esc_5, esc_6, voltage);
     //Serial.println(data);
 }
-//pitch forward PID value is positive
+//pitch down PID value is positive
 void pitchPID(double currentPitch){
     pitchCurrentTime = millis();
     //instantaneous error
@@ -329,9 +329,10 @@ void pitchPID(double currentPitch){
     pitchOldTime = pitchCurrentTime;
     pitchAdjust = pitchPorportional + pitchIntegral + pitchDerivitive;
 }
-void rollPID(double currentroll){
+//rolling right is negative
+void rollPID(double currentRoll){
     //instantaneous error
-    rollPorportional = (desiredRoll - currentroll) * pGainRoll;
+    rollPorportional = (desiredRoll - currentRoll) * pGainRoll;
     //Integral
     rollIntegral += rollPorportional * iGainRoll;
     rollDerivitive = (rollPorportional - rollLastError) * dGainRoll;
@@ -355,7 +356,19 @@ void yawPID(double currentyaw){
  *
  * Possibly move the altimeter to the second I2C channel due to interference, or just redo the wiring
  */
-
+///                     1          2
+///                      \        /
+///                   3---        ---4
+///                      /        \
+///                     5          6
+void throttleAdjust(){
+    esc_1 = throttle + pitchAdjust + rollAdjust;
+    esc_2 = throttle + pitchAdjust - rollAdjust;
+    esc_3 = throttle + rollAdjust;
+    esc_4 = throttle - rollAdjust;
+    esc_5 = throttle - pitchAdjust + rollAdjust;
+    esc_6 = throttle - pitchAdjust - rollAdjust;
+}
 
     /*
     int loopStart = millis();
