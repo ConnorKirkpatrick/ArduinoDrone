@@ -5,13 +5,14 @@
 #include "Servo.h"
 
 #include <MedianFilterLib2.h>
-#include "../.pio//libdeps/due/Average//src/Average.h"
-#include "../.pio//libdeps/due/E220Lib/src/E220.h"
+#include "Average.h"
+#include "E220.h"
 
 #include "math.h"
 
-#include <Wire.h>
-#include <Adafruit_HMC5883_U.h>
+#include "Wire.h"
+#include "Adafruit_HMC5883_U.h"
+
 
 void(* resetFunc) (void) = 0;
 
@@ -140,28 +141,35 @@ int rollAdjust = 0;
 void yaw(int heading);
 int yawAdjust = 0;
 //PID Params
-float pGainPitch = 0.5;
-float iGainPitch = 0.5;
-float dGainPitch = 0.27;
-float pGainRoll = 0.45;
-float iGainRoll = 0.45;
-float dGainRoll = 0.25;
+float pGainPitch = 0.3;
+float iGainPitch = 0.3;
+float dGainPitch = 0.15;
+float pGainRoll = 0.3;
+float iGainRoll = 0.3;
+float dGainRoll = 0.15;
+float pGainYaw = 0.3;
+float iGainYaw = 0.3;
+float dGainYaw = 0.15;
 //Pitch PID
+void pitchPID(double currentPitch);
 int pitchCurrentTime = 0;
 int pitchOldTime = 0;
-void pitchPID(double currentPitch);
 long pitchPorportional = 0;
 long pitchLastError = 0;
 long pitchIntegral = 0;
 long pitchDerivitive= 0;
 //roll PID
 void rollPID(double currentRoll);
+int rollCurrentTime = 0;
+int rollOldTime = 0;
 long rollPorportional = 0;
 long rollLastError = 0;
 long rollIntegral = 0;
 long rollDerivitive= 0;
 //yaw PID
 void yawPID(double currentYaw);
+int yawCurrentTime = 0;
+int yawOldTime = 0;
 long yawPorportional = 0;
 long yawLastError = 0;
 long yawIntegral = 0;
@@ -331,21 +339,25 @@ void pitchPID(double currentPitch){
 }
 //rolling right is negative
 void rollPID(double currentRoll){
+    rollCurrentTime = millis();
     //instantaneous error
     rollPorportional = (desiredRoll - currentRoll) * pGainRoll;
     //Integral
-    rollIntegral += rollPorportional * iGainRoll;
-    rollDerivitive = (rollPorportional - rollLastError) * dGainRoll;
+    rollIntegral += rollPorportional *(rollCurrentTime - rollOldTime) * iGainRoll;
+    rollDerivitive = ((rollPorportional - rollLastError) * (rollCurrentTime - rollOldTime)) * dGainRoll;
     rollLastError = rollPorportional;
+    rollOldTime = rollCurrentTime;
     rollAdjust = rollPorportional + rollIntegral + rollDerivitive;
 }
-void yawPID(double currentyaw){
+void yawPID(double currentYaw){
+    yawCurrentTime = millis();
     //instantaneous error
-    yawPorportional = desiredHeading - currentyaw;
+    yawPorportional = (desiredYaw - currentYaw) * pGainYaw;
     //Integral
-    yawIntegral += yawPorportional;
-    yawDerivitive = yawPorportional - yawLastError;
+    yawIntegral += yawPorportional *(yawCurrentTime - yawOldTime) * iGainYaw;
+    yawDerivitive = ((yawPorportional - yawLastError) * (yawCurrentTime - yawOldTime)) * dGainYaw;
     yawLastError = yawPorportional;
+    yawOldTime = yawCurrentTime;
     yawAdjust = yawPorportional + yawIntegral + yawDerivitive;
 }
 ///Calculate the motor speeds
@@ -354,7 +366,7 @@ void yawPID(double currentyaw){
  * value range is between +- 500(?), if value is over set it to be 500
  * combine the pitch/roll/yaw values with the throttle setting
  *
- * Possibly move the altimeter to the second I2C channel due to interference, or just redo the wiring
+ * Possibly move the altimeter to the second I2C channel due to interference, or just redo the wiring and see if it improves
  */
 ///                     1          2
 ///                      \        /
@@ -362,6 +374,8 @@ void yawPID(double currentyaw){
 ///                      /        \
 ///                     5          6
 void throttleAdjust(){
+    //pitched forward, positive adjust value
+    //rolled left, positive adjust value
     esc_1 = throttle + pitchAdjust + rollAdjust;
     esc_2 = throttle + pitchAdjust - rollAdjust;
     esc_3 = throttle + rollAdjust;
