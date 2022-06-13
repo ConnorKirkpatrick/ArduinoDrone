@@ -50,14 +50,14 @@ int esc_5 = 0;
 int esc_6 = 0;
 
 void test();
-//Setup the lora radio for telemetry, command and control
-Stream &RadioConnection = (Stream &)Serial;
+///Setup the lora radio for telemetry, command and control
+Stream &RadioConnection = (Stream &)Serial2;
 String message;
 #define m0 8
 #define m1 9
 #define aux 22
-int lastMessageTime;
-int currentTime;
+int lastMessageTime = 0;
+int currentTime = 0;
 
 //BME/P-280
 //connect via I2C ports
@@ -144,9 +144,11 @@ int yawAdjust = 0;
 float pGainPitch = 0.3;
 float iGainPitch = 0.3;
 float dGainPitch = 0.15;
+
 float pGainRoll = 0.3;
 float iGainRoll = 0.3;
 float dGainRoll = 0.15;
+
 float pGainYaw = 0.3;
 float iGainYaw = 0.3;
 float dGainYaw = 0.15;
@@ -175,6 +177,8 @@ long yawLastError = 0;
 long yawIntegral = 0;
 long yawDerivitive= 0;
 
+void throttleAdjust();
+
 void setThrottle();
 int desiredHeight ;
 int oldHeight;
@@ -201,50 +205,51 @@ void setup()
     Serial.println("SYSTEM INITIALISING");
     attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
     ///STARTUP CHECKLIST
-    /*
+    ///Starting the radio
     E220 radioModule(&RadioConnection, m0, m1, aux);
     while(!radioModule.init()){
         Serial.println("Waiting for radio");
         delay(5000);
     }
-     */
+    Serial.println("Radio Ready");
     RadioConnection.println("Radio Ready");
     delay(1000);
     //setup the motors, set to idle
     idleAll();
-    //motor_1.attach(5);
-    //motor_2.attach(4);
-    //motor_3.attach(7);
-    //motor_4.attach(2);
-    //motor_5.attach(6);
-    //motor_6.attach(3);
+    motor_1.attach(5);
+    motor_2.attach(4);
+    motor_3.attach(7);
+    motor_4.attach(2);
+    motor_5.attach(6);
+    motor_6.attach(3);
     RadioConnection.println("MOTORS READY");
 
 
-    //Start the gps
-    ///startGPS();
-    //Start the Altimeter, check its connected
+    ///Start the gps
+    //startGPS();
+    ///Start the Altimeter, check its connected
     //altimeterInit();
     //RadioConnection.println("Altimeter Started");
-    //start the gyro
+    ///start the gyro
     startGyro();
     startCompass();
     //startUltrasonic();
 
-    //start battery monitor
+    ///start battery monitor
     pinMode(ampPin, INPUT);
     pinMode(voltPin, INPUT);
     getBatteryValues();
 
     oldAttitude = getAttitude();
     lastMessageTime = millis();
-    desiredHeading = getHeading();
-    oldHeading = desiredHeading;
 
     RadioConnection.println("SYSTEM INITIALISED");
     RadioConnection.println("ENABLE CONTROLLER");
 
     flightMode = 1;
+    yawLastError = getHeading();
+    desiredYaw = yawLastError;
+    Serial.println(yawLastError);
 }
 
 
@@ -266,18 +271,32 @@ void loop() {
         message = "";
     }
 
+    getBatteryValues();
     currentAttitude = getAttitude();
-
     if(RC_Throttle < 1000){RC_Throttle = 1000;}
     throttle = RC_Throttle;
+    if(flightMode == 1){
+        pitchPID(currentAttitude.pitch);
+        rollPID(currentAttitude.roll);
+        yawPID(getHeading());
+        throttleAdjust();
+    }
+    Serial.println("Loop");
+    currentTime = millis();
+    if(currentTime - lastMessageTime > 1250) {
+        char data[40];
+        sprintf(data, "%i,%f,%f,%i,%i,%f,%f", throttle, currentAttitude.pitch, currentAttitude.roll, desiredHeading,
+                getHeading(), voltage, amps);
+        RadioConnection.println(data);
+        Serial.println(data);
+        lastMessageTime = currentTime;
+        Serial.println("Msg sent");
+    }
 
-    getBatteryValues();
-    int battery_voltage = voltage;
-    pitchPID(currentAttitude.pitch);
-    rollPID(currentAttitude.roll);
-    Serial.println(pitchAdjust);
-    Serial.println(rollAdjust);
-    Serial.println("");
+
+
+
+
     /*
 
     if (flightMode == 1){                                                       //The motors are started.
@@ -352,7 +371,7 @@ void rollPID(double currentRoll){
 void yawPID(double currentYaw){
     yawCurrentTime = millis();
     //instantaneous error
-    yawPorportional = (desiredYaw - currentYaw) * pGainYaw;
+    yawPorportional = ((int)desiredYaw - (int)currentYaw) * pGainYaw;
     //Integral
     yawIntegral += yawPorportional *(yawCurrentTime - yawOldTime) * iGainYaw;
     yawDerivitive = ((yawPorportional - yawLastError) * (yawCurrentTime - yawOldTime)) * dGainYaw;
@@ -376,12 +395,27 @@ void yawPID(double currentYaw){
 void throttleAdjust(){
     //pitched forward, positive adjust value
     //rolled left, positive adjust value
-    esc_1 = throttle + pitchAdjust + rollAdjust;
-    esc_2 = throttle + pitchAdjust - rollAdjust;
-    esc_3 = throttle + rollAdjust;
-    esc_4 = throttle - rollAdjust;
-    esc_5 = throttle - pitchAdjust + rollAdjust;
-    esc_6 = throttle - pitchAdjust - rollAdjust;
+    //yaw left, positive adjust value. Increase 1,4,5 to yaw
+    esc_1 = throttle + pitchAdjust + rollAdjust - yawAdjust;
+    esc_2 = throttle + pitchAdjust - rollAdjust + yawAdjust;
+    esc_3 = throttle + rollAdjust + yawAdjust;
+    esc_4 = throttle - rollAdjust - yawAdjust;
+    esc_5 = throttle - pitchAdjust + rollAdjust - yawAdjust;
+    esc_6 = throttle - pitchAdjust - rollAdjust + yawAdjust;
+
+    if(esc_1 > 2000) esc_1 = 2000;
+    if(esc_2 > 2000) esc_2 = 2000;
+    if(esc_3 > 2000) esc_3 = 2000;
+    if(esc_4 > 2000) esc_4 = 2000;
+    if(esc_5 > 2000) esc_5 = 2000;
+    if(esc_6 > 2000) esc_6 = 2000;
+
+    motor_1.writeMicroseconds(esc_1);
+    motor_2.writeMicroseconds(esc_2);
+    motor_3.writeMicroseconds(esc_3);
+    motor_4.writeMicroseconds(esc_4);
+    motor_5.writeMicroseconds(esc_5);
+    motor_6.writeMicroseconds(esc_6);
 }
 
     /*
@@ -727,8 +761,8 @@ int getHeading(){
         heading -= 2*PI;
     // Convert radians to degrees for readability.
     return(heading * 180/M_PI);
-
 }
+
 void startUltrasonic(){
     pinMode(heightTrigger, OUTPUT);
     pinMode(heightEcho, INPUT);
@@ -777,11 +811,6 @@ void rising() {
 void falling() {
     attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
     RC_Throttle = micros()-prev_time - 5;
-}
-
-
-float magnitude(float value){
-    return sqrt(sq(value));
 }
 /*
 ///ATTITUDE CONTROL
