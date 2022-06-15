@@ -13,8 +13,8 @@
 #include "Wire.h"
 #include "Adafruit_HMC5883_U.h"
 
-
-void(* resetFunc) (void) = 0;
+#include "I2CScanner.h"
+I2CScanner scanner;
 
 static int FMC(struct pt *pt);
 static int ProtoThread2(struct pt *pt);
@@ -49,9 +49,9 @@ int esc_4 = 0;
 int esc_5 = 0;
 int esc_6 = 0;
 
-void test();
 ///Setup the lora radio for telemetry, command and control
-Stream &RadioConnection = (Stream &)Serial2;
+//Stream &RadioConnection = (Stream &)Serial2;
+Stream &RadioConnection = (Stream &)Serial;
 String message;
 #define m0 8
 #define m1 9
@@ -77,6 +77,7 @@ void startGPS();
 void getCoords(float array[]);
 
 //Motion processing unit, our gyroscope
+const int MPU_addr=0x68;
 Adafruit_MPU6050 mpu;
 struct attitude{
     double pitch;
@@ -202,10 +203,15 @@ void setup()
     Serial.begin(9600);
     Serial1.begin(9600);
     Serial2.begin(9600);
+
+    Wire.begin();
+    Wire.setTimeout(100);
+    scanner.Scan();
     Serial.println("SYSTEM INITIALISING");
     attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
     ///STARTUP CHECKLIST
     ///Starting the radio
+    /*
     E220 radioModule(&RadioConnection, m0, m1, aux);
     while(!radioModule.init()){
         Serial.println("Waiting for radio");
@@ -213,6 +219,8 @@ void setup()
     }
     Serial.println("Radio Ready");
     RadioConnection.println("Radio Ready");
+     */
+    scanner.Init();
     delay(1000);
     //setup the motors, set to idle
     idleAll();
@@ -232,7 +240,7 @@ void setup()
     //RadioConnection.println("Altimeter Started");
     ///start the gyro
     startGyro();
-    startCompass();
+    //startCompass();
     //startUltrasonic();
 
     ///start battery monitor
@@ -245,11 +253,12 @@ void setup()
 
     RadioConnection.println("SYSTEM INITIALISED");
     RadioConnection.println("ENABLE CONTROLLER");
-
+/*
     flightMode = 1;
     yawLastError = getHeading();
     desiredYaw = yawLastError;
     Serial.println(yawLastError);
+    */
 }
 
 
@@ -273,24 +282,26 @@ void loop() {
 
     getBatteryValues();
     currentAttitude = getAttitude();
-    if(RC_Throttle < 1000){RC_Throttle = 1000;}
-    throttle = RC_Throttle;
+
     if(flightMode == 1){
+        if(RC_Throttle < 1000){RC_Throttle = 1000;}
+        throttle = RC_Throttle;
+
         pitchPID(currentAttitude.pitch);
         rollPID(currentAttitude.roll);
-        yawPID(getHeading());
+        //yawPID(getHeading());
         throttleAdjust();
     }
-    Serial.println("Loop");
     currentTime = millis();
     if(currentTime - lastMessageTime > 1250) {
         char data[40];
         sprintf(data, "%i,%f,%f,%i,%i,%f,%f", throttle, currentAttitude.pitch, currentAttitude.roll, desiredHeading,
-                getHeading(), voltage, amps);
+                0, voltage, amps);
         RadioConnection.println(data);
-        Serial.println(data);
+        sprintf(data,"%i,%i", pitchAdjust, rollAdjust);
+        RadioConnection.println(data);
+        Serial.println(millis());
         lastMessageTime = currentTime;
-        Serial.println("Msg sent");
     }
 
 
@@ -671,11 +682,14 @@ void startGyro(){
     double offsetV = 0;
     double offsetD = 0;
     double offsetL = 0;
-    if (!mpu.begin()) {
+    while (!mpu.begin()) {
         RadioConnection.println("Failed to find MPU6050 chip");
         mpu.reset();
         delay(1000);
-        startGyro();
+        //in future, move to isolated power so we can turn it off to reset the device
+        //this is because without power loss, the device will not recover
+        //augment this using the I2C scanner, if 3 devices are not seen on startup, cycle the power until it is seen
+        //for the time being, disconnect the altimeter, see if it works
     }
     mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
     mpu.setGyroRange(MPU6050_RANGE_500_DEG);
@@ -698,12 +712,9 @@ void startGyro(){
 }
 
 attitude getAttitude(){
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
     double x;
     double y;
     double z;
-    const int MPU_addr=0x68;
     int minVal=265;
     int maxVal=402;
     int xAng;
