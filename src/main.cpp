@@ -50,8 +50,8 @@ int esc_5 = 0;
 int esc_6 = 0;
 
 ///Setup the lora radio for telemetry, command and control
-//Stream &RadioConnection = (Stream &)Serial2;
-Stream &RadioConnection = (Stream &)Serial;
+Stream &RadioConnection = (Stream &)Serial2;
+//Stream &RadioConnection = (Stream &)Serial; //debug line
 String message;
 #define m0 8
 #define m1 9
@@ -103,7 +103,7 @@ float yawTrim = 0;
 void startGyro();
 attitude getAttitude();
 
-Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified();
 float magDeclanation = 0.19;
 void startCompass();
 int getHeading();
@@ -181,7 +181,7 @@ long yawDerivitive= 0;
 void throttleAdjust();
 
 void setThrottle();
-int desiredHeight ;
+int desiredHeight;
 int oldHeight;
 
 void setSpeed();
@@ -200,6 +200,7 @@ void falling();
 
 void setup()
 {
+    attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
     Serial.begin(9600);
     Serial1.begin(9600);
     Serial2.begin(9600);
@@ -208,10 +209,9 @@ void setup()
     Wire.setTimeout(100);
     scanner.Scan();
     Serial.println("SYSTEM INITIALISING");
-    attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
+
     ///STARTUP CHECKLIST
     ///Starting the radio
-    /*
     E220 radioModule(&RadioConnection, m0, m1, aux);
     while(!radioModule.init()){
         Serial.println("Waiting for radio");
@@ -219,7 +219,6 @@ void setup()
     }
     Serial.println("Radio Ready");
     RadioConnection.println("Radio Ready");
-     */
     scanner.Init();
     delay(1000);
     //setup the motors, set to idle
@@ -240,7 +239,7 @@ void setup()
     //RadioConnection.println("Altimeter Started");
     ///start the gyro
     startGyro();
-    //startCompass();
+    startCompass();
     //startUltrasonic();
 
     ///start battery monitor
@@ -253,12 +252,12 @@ void setup()
 
     RadioConnection.println("SYSTEM INITIALISED");
     RadioConnection.println("ENABLE CONTROLLER");
-/*
+
     flightMode = 1;
     yawLastError = getHeading();
     desiredYaw = yawLastError;
     Serial.println(yawLastError);
-    */
+
 }
 
 
@@ -268,12 +267,18 @@ void loop() {
     if(RadioConnection.available()){
         message = RadioConnection.readString();
     }
-    if(message.equals("Start\n")){
+    if(message.indexOf("Start") > -1){
         RadioConnection.println("Starting flight");
         flightMode = 1;
         message = "";
     }
-    else if(message.equals("end\n")){
+    else if(message.indexOf("setHeading") > -1){
+        desiredHeading = message.substring(message.indexOf("setHeading")+10).toInt();
+        RadioConnection.write("New Heading set to: ");
+        RadioConnection.println(desiredHeading);
+        message = "";
+    }
+    else if(message.indexOf("end") > -1){
         RadioConnection.println("ENDING");
         flightMode = 0;
         idleAll();
@@ -282,77 +287,30 @@ void loop() {
 
     getBatteryValues();
     currentAttitude = getAttitude();
+    if(RC_Throttle < 1000){RC_Throttle = 1000;}
+    throttle = RC_Throttle;
 
-    if(flightMode == 1){
-        if(RC_Throttle < 1000){RC_Throttle = 1000;}
-        throttle = RC_Throttle;
-
+    if(flightMode == 0){
+        idleAll();
+    }
+    else if(flightMode == 1){
         pitchPID(currentAttitude.pitch);
         rollPID(currentAttitude.roll);
-        //yawPID(getHeading());
+        yawPID(getHeading());
         throttleAdjust();
     }
     currentTime = millis();
     if(currentTime - lastMessageTime > 1250) {
         char data[40];
         sprintf(data, "%i,%f,%f,%i,%i,%f,%f", throttle, currentAttitude.pitch, currentAttitude.roll, desiredHeading,
-                0, voltage, amps);
+                getHeading(), voltage, amps);
         RadioConnection.println(data);
         sprintf(data,"%i,%i", pitchAdjust, rollAdjust);
         RadioConnection.println(data);
-        Serial.println(millis());
+        //Serial.println(millis());
         lastMessageTime = currentTime;
     }
 
-
-
-
-
-    /*
-
-    if (flightMode == 1){                                                       //The motors are started.
-        if (throttle > 1800) throttle = 1800;                                   //We need some room to keep full control at full throttle.
-
-
-
-
-        //read battery voltage 12.40v as 1240
-        if (battery_voltage < 1240 && battery_voltage > 800){                   //Is the battery connected?
-            esc_1 += esc_1 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-1 pulse for voltage drop.
-            esc_2 += esc_2 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-2 pulse for voltage drop.
-            esc_3 += esc_3 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-3 pulse for voltage drop.
-            esc_4 += esc_4 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-4 pulse for voltage drop.
-            esc_5 += esc_5 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-5 pulse for voltage drop.
-            esc_6 += esc_6 * ((1240 - battery_voltage)/(float)3500);              //Compensate the esc-6 pulse for voltage drop.
-        }
-
-        if (esc_1 < 1100) esc_1 = 1100;                                         //Keep the motors running.
-        if (esc_2 < 1100) esc_2 = 1100;                                         //Keep the motors running.
-        if (esc_3 < 1100) esc_3 = 1100;                                         //Keep the motors running.
-        if (esc_4 < 1100) esc_4 = 1100;                                         //Keep the motors running.
-        if (esc_5 < 1100) esc_4 = 1100;                                         //Keep the motors running.
-        if (esc_6 < 1100) esc_4 = 1100;                                         //Keep the motors running.
-
-        if(esc_1 > 2000)esc_1 = 2000;                                           //Limit the esc-1 pulse to 2000us.
-        if(esc_2 > 2000)esc_2 = 2000;                                           //Limit the esc-2 pulse to 2000us.
-        if(esc_3 > 2000)esc_3 = 2000;                                           //Limit the esc-3 pulse to 2000us.
-        if(esc_4 > 2000)esc_4 = 2000;                                           //Limit the esc-4 pulse to 2000us.
-        if(esc_5 > 2000)esc_5 = 2000;                                           //Limit the esc-4 pulse to 2000us.
-        if(esc_6 > 2000)esc_6 = 2000;                                           //Limit the esc-4 pulse to 2000us.
-    }
-
-    else{
-        esc_1 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-1.
-        esc_2 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-2.
-        esc_3 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-3.
-        esc_4 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-4.
-        esc_5 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-5.
-        esc_6 = 1000;                                                           //If start is not 2 keep a 1000us pulse for ess-6.
-    }
-     */
-    //char data [40];
-    //sprintf(data,"%i,%d,%d,%d,%d,%d,%f",esc_1, esc_2, esc_3,esc_4,esc_5, esc_6, voltage);
-    //Serial.println(data);
 }
 //pitch down PID value is positive
 void pitchPID(double currentPitch){
@@ -750,9 +708,26 @@ attitude getAttitude(){
 }
 
 void startCompass(){
+    while(!mag.begin()){
+        Serial.println("No compass found");
+        delay(2500);
+    }
+    /*
+    //initialise the i2c device, overwrite device registers with 0x00
+    Wire.beginTransmission(0x3C >> 1);
+    Wire.write(0x02);
+    Wire.write(0x00);
+    Wire.endTransmission(true);
+
+    //initialise the magnetic accuracy
+    Wire.beginTransmission(0x3C >> 1);
+    Wire.write(0x01);
+    Wire.write(0x20);
+    Wire.endTransmission(true);
+    */
     int initialHeading = getHeading();
     while(initialHeading == NULL){
-        Serial.println("No HMC5883 detected ... Check your wiring!");
+        Serial.println("bad heading read, retrying");
         delay(2500);
     }
     RadioConnection.println("Compass Started");
@@ -824,227 +799,6 @@ void falling() {
     RC_Throttle = micros()-prev_time - 5;
 }
 /*
-///ATTITUDE CONTROL
-void pitch(float pitchVal, float oldPitch){
-    if(pitchVal == desiredPitch){
-        ///set the pitch offset to 0
-        pitchAdjust = 0;
-    }
-    else{
-        if(magnitude(pitchVal) < magnitude(oldPitch)){
-            ///lower magnitude means we are actively correcting, thus dont change the inputs
-        }
-        else {
-            ///we have a higher or equal mag, thus not correcting
-            if (pitchVal > 0) { pitchAdjust = pitchAdjust + pitchIncrement;}
-            else if (pitchVal < 0) {pitchAdjust = pitchAdjust - pitchIncrement;}
-        }
-    }
-    ///pitch is positive, we are nose high, thus decrease front and increase rear
-    int newSpeed = throttle - pitchAdjust + pitchTrim;
-    T1 = T1 + newSpeed;
-    T2 = T2 + newSpeed;
-    newSpeed = throttle + pitchAdjust + pitchTrim;
-    T5 = T5 + newSpeed;
-    T6 = T6 + newSpeed;
-
-    T3 = T3 + throttle;
-    T4 = T4 + throttle;
-}
-
-void roll(float rollValue, float oldRoll){
-    if(rollValue == desiredRoll){ rollAdjust = 0;}
-    else{
-        if(magnitude(rollValue) < magnitude(oldRoll)){
-            ///lower magnitude means we are actively correcting, thus dont change the inputs
-        }
-        else{
-            ///we have a higher or equal mag, thus not correcting
-            if(rollValue > 0){ rollAdjust = rollAdjust + rollIncrement;}
-            else if(rollValue < 0){ rollAdjust = rollAdjust - rollIncrement;}
-        }
-    }
-    ///roll is positive, we are rolling right, decrease left and increase right
-    int newSpeed = throttle - rollAdjust + rollTrim;
-    //left motors
-    T1 = T1 + newSpeed;
-    T3 = T3 + newSpeed;
-    T5 = T5 + newSpeed;
-    newSpeed = throttle + rollAdjust + rollTrim;
-    //right motors
-    T2 = T2 + newSpeed;
-    T4 = T4 + newSpeed;
-    T6 = T6 + newSpeed;
-    ///rolling right is positive
-    ///left motors are 1,3,5. Right are 2,4,6
-    ///if pitched right, we add to right motors, subtract from left
-
-}
-
-void yaw(int currentHeading){
-    int flag = 2;
-    if(currentHeading == desiredHeading){yawAdjust = 0;}
-    else{
-        ///work out magnitude
-        if(magnitude(currentHeading - desiredHeading) < magnitude(oldHeading - desiredHeading)){
-            ///we are correcting, thus do nothing
-        }
-        else {
-            ///work out angles based on the desired heading
-            int value = desiredHeading - 180;
-            ///if value > 0 but less than 360 -> if the current is > value then we need to turn to the left
-            ///     if value > 0 and > 360, subtract 360 from value. if current < (value-360) or > desired turn left
-            ///if value < 0, subtract from 360. if current > (360-value) or value < desired turn right
-            if (value < 0) {
-                ///desired between 0 to 180
-                value = 360 + value;
-                if (currentHeading > value | currentHeading < desiredHeading) {
-                    ///turn left
-                    flag = 1;
-                } else {
-                    ///turn right
-                    flag = -1;
-                }
-            } else if (value >= 0) {
-                ///desired between 180 to 360
-                if (currentHeading < desiredHeading & currentHeading > value) {
-                    ///turn left
-                    flag = 1;
-                } else {
-                    ///turn right
-                    flag = -1;
-                }
-            }
-            ///+1 is left, -1 is right
-            ///1+4+5(cw) and 2+3+6(ccw)
-            if (flag > 0) {
-                ///left
-                yawAdjust = yawAdjust - yawIncrement;
-            } else if (flag < 0) {
-                ///Right
-                yawAdjust = yawAdjust + yawIncrement;
-            }
-        }
-    }
-    ///we need to turn right, so throttle is -2
-    int newSpeed = throttle + yawAdjust + yawTrim;
-    //left torque motors
-    T2 = T2 + newSpeed;
-    T3 = T3 + newSpeed;
-    T6 = T6 + newSpeed;
-    newSpeed = throttle - yawAdjust + yawTrim;
-    //right torque motors
-    T1 = T1 + newSpeed;
-    T4 = T4 + newSpeed;
-    T5 = T5 + newSpeed;
-    oldHeading = currentHeading;
-}
-
-void setThrottle(){
-    /*
-    ///calculate height delta
-    int currentHeight = heightFilter.GetFiltered();
-    if(currentHeight - oldHeight > 0){
-        ///we are currently accenting
-        if(currentHeight < desiredHeight){
-            ///we are correcting towards desired, thus do nothing
-        }
-        else{
-            ///we are not correcting, thus increase throttle
-            throttle = throttle + 5;
-        }
-    }
-    if(currentHeight - oldHeight == 0){
-        ///we are stable in the air
-        if(currentHeight < desiredHeight){
-            throttle = throttle + 5;
-        }
-        if(currentHeight > desiredHeight){
-            throttle = throttle - 5;
-        }
-    }
-    if (currentHeight - oldHeight < 0){
-        ///we are currently descending
-        if(currentHeight > desiredHeight){
-            ///we are correcting towards desired height, thus do nothing
-        }
-        else{
-            ///We are not correcting, thus increase throttle
-            throttle = throttle + 5;
-        }
-    }
-
-    if(RC_Throttle < 1000){RC_Throttle = 1000;}
-    throttle = RC_Throttle;
-    //Serial.println(throttle);
-    ///Manage the min and max possible settings for armed throttle
-    if(throttle > throttleLim){
-        throttle = throttleLim;
-    }
-    /*
-    if(throttle < 1050){
-        throttle = 1050;
-    }
-    oldHeight = currentHeight;
-
-}
-
-void rising() {
-    attachInterrupt(digitalPinToInterrupt(12), falling, FALLING);
-    prev_time = micros();
-}
-void falling() {
-    attachInterrupt(digitalPinToInterrupt(12), rising, RISING);
-    RC_Throttle = micros()-prev_time - 5;
-}
-
-void setSpeed(){
-
-    T1 = T1/3;
-    T2 = T2/3;
-    T3 = T3/3;
-    T4 = T4/3;
-    T5 = T5/3;
-    T6 = T6/3;
-    /*
-    if(T1 < 1050){T1 = 1050;}
-    if(T2 < 1050){T2 = 1050;}
-    if(T3 < 1050){T3 = 1050;}
-    if(T4 < 1050){T4 = 1050;}
-    if(T5 < 1050){T5 = 1050;}
-    if(T6 < 1050){T6 = 1050;}
-
-    if(T1 > throttleLim){T1 = throttleLim;}
-    if(T2 > throttleLim){T2 = throttleLim;}
-    if(T3 > throttleLim){T3 = throttleLim;}
-    if(T4 > throttleLim){T4 = throttleLim;}
-    if(T5 > throttleLim){T5 = throttleLim;}
-    if(T6 > throttleLim){T6 = throttleLim;}
-
-    if(throttle > 1000) {
-        motor_1.writeMicroseconds(T1);
-        motor_2.writeMicroseconds(T2);
-        motor_3.writeMicroseconds(T3);
-        motor_4.writeMicroseconds(T4);
-        motor_5.writeMicroseconds(T5);
-        motor_6.writeMicroseconds(T6);
-    }
-    else{
-        motor_1.writeMicroseconds(1000);
-        motor_2.writeMicroseconds(1000);
-        motor_3.writeMicroseconds(1000);
-        motor_4.writeMicroseconds(1000);
-        motor_5.writeMicroseconds(1000);
-        motor_6.writeMicroseconds(1000);
-    }
-
-    T1 = 0;
-    T2 = 0;
-    T3 = 0;
-    T4 = 0;
-    T5 = 0;
-    T6 = 0;
-}
 void test(){
     RadioConnection.println("Starting Test....");
     delay(5000);
@@ -1066,11 +820,9 @@ void test(){
     delay(1500);
     RadioConnection.println("Test completed");
 }
+
  */
 ///LIGHTS
 ///Nav lights do not blink, red and green
 ///Anti-collision do blink, red or white
 
-
-///TODO: CHECK MOTOR SETTINGS
-    ///currently running 3 seconds on then dropping 1 second off
