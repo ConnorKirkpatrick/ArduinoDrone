@@ -16,8 +16,7 @@ void setup() {
   Serial.println("Starting up");
 
   startRadio();
-  startBMP();
-  /*
+
   delay(1000);// Wait for sensor to stabilize
   startBMP();
   startCompass();
@@ -30,7 +29,7 @@ void setup() {
 
   Serial.println("SYSTEM STARTED");
   sendRadio("System startup complete");
-   */
+
 }
 
 void loop() {
@@ -38,26 +37,28 @@ void loop() {
   double dt = (double)(micros() - timer) / 1000000; // Calculate delta time
   timer = micros();
 
-  //currentAttitude = getGyroData();
-  //kalmanUpdate(currentAttitude, dt);
-  /*
-  Serial.print("RawPitch:");
-  Serial.print(currentAttitude.pitch);
-  Serial.print(",");
-  Serial.print("KPitch:");
-  Serial.print(kalAngleX);
-  Serial.print(",");
-  Serial.print("RawRoll:");
-  Serial.print(currentAttitude.roll);
-  Serial.print(",");
-  Serial.print("KRoll:");
-  Serial.print(kalAngleY);
-  Serial.println("");
-  */
+  currentAttitude = getGyroData();
+  kalmanUpdate(currentAttitude, dt);
+  getCoords(coords);
   if(timer/1000 - rdt >= 500){ //send data every 0.5 seconds
     //it has been 1s since last transmission
     rdt = timer/1000;
-    Serial.println(getAltitude());
-    sendRadio("Ping");
+    //data format: lat,long,pitch,roll,heading,alt
+    String data = "";
+    //data += String(coords[2],7);
+    data += "51.3443708";
+    data += ",";
+    data += "-0.6433905";
+    //data += String(coords[3],7);
+    data += ",";
+    data += kalAngleX * 180 / PI;
+    data += ",";
+    data += kalAngleY * 180 / PI;
+    data += ",";
+    data += getHeading(currentAttitude);
+    data += ",";
+    data += getAltitude();
+    sendRadio(data);
   }
 }
+// 51.3443708,-0.6433905,134.11,-129.55,224.68,0.00

@@ -3,19 +3,17 @@
 //BAUD rate is 9600
 #include "TinyGPS++.h"
 TinyGPSPlus gps;//This is the GPS object that will pretty much do all the grunt work with the NMEA data
-float coords[6];
-float lastFix[2];
-double distanceFromLastFix;
+double coords[6];
 
 
-void getCoords(float array[]){
+void getCoords(double array[]){
   if(Serial1.available()){
     while(Serial1.available())//While there are characters to come from the GPS
     {
       gps.encode(Serial1.read());//This feeds the serial NMEA data into the library one char at a time
     }
   }
-  if(gps.location.isUpdated()){
+  if(gps.location.isUpdated()){ //if data is not updated, don't waste time getting a new set, just wait for the next request
     array[0] = gps.satellites.value();
     array[1] = gps.time.value();
     array[2] = gps.location.lat();
@@ -26,14 +24,16 @@ void getCoords(float array[]){
 }
 
 void startGPS(){
-  Serial.println("GPS Starting....");
+  sendRadio("GPS Starting....");
   Serial1.begin(9600);
   getCoords(coords);
   //if there is no satellites, no valid fix can be made thus retry
   while(coords[0] < 1) {
+    delay(2000);
     getCoords(coords);
+    String data = "Found satellites: ";
+    data += coords[0];
+    sendRadio(data);
   }
   sendRadio("GPS Ready");
-  lastFix[0] = coords[2];
-  lastFix[1] = coords[3];
 }
