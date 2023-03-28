@@ -93,7 +93,7 @@ attitude getGyroData() {
   AcX=Wire.read()<<8|Wire.read();
   AcY=Wire.read()<<8|Wire.read();
   AcZ=Wire.read()<<8|Wire.read();
-
+  Serial.println(AcY);
   currentAttitude.AccX = a.acceleration.x - PAccXOffset;
   currentAttitude.AccY = a.acceleration.y - PAccYOffset;
   currentAttitude.AccZ = a.acceleration.z - PAccZOffset;

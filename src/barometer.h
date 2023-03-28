@@ -19,9 +19,11 @@ void restartBMP(){
 
 float getAltitude(){
   if(bmp.getStatus() == 243 || bmp.getStatus() == 0){
-    restartBMP(); //restart BMP sensor if an error code is detected
+    //restartBMP(); //restart BMP sensor if an error code is detected
+    sendRadio("Baro Error");
   }
   //calculate alt based on baro pressure and temp
   double h = ((pow(1013.25/bmp.readPressure(), 1/5257) -1) * (bmp.readTemperature())) / 0.0065; //using hysometric formula
   return h;
 }
+//upon baro error, the wire interface locks up and thus destroys the accuracy of the gyro
