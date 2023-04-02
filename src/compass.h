@@ -65,9 +65,9 @@ float getHeading(attitude currentAttitude){
   mY = event.magnetic.y-offsetY;
   mZ = event.magnetic.z-offsetZ;
   /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
-  Serial.print("X: "); Serial.print(mX); Serial.print("  ");
-  Serial.print("Y: "); Serial.print(mY); Serial.print("  ");
-  Serial.print("Z: "); Serial.print(mZ); Serial.print("  ");Serial.println("uT");
+  //Serial.print("X: "); Serial.print(mX); Serial.print("  ");
+  //Serial.print("Y: "); Serial.print(mY); Serial.print("  ");
+  //Serial.print("Z: "); Serial.print(mZ); Serial.print("  ");Serial.println("uT");
 
 
   //correct for tilt before calculating heading
@@ -99,6 +99,6 @@ float getHeading(attitude currentAttitude){
   // Convert radians to degrees for readability.
   float headingDegrees = heading * 180/M_PI;
 
-  Serial.print("Heading (degrees): "); Serial.println(headingDegrees);
+  //Serial.print("Heading (degrees): "); Serial.println(headingDegrees);
   return headingDegrees;
 }
