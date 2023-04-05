@@ -2,6 +2,7 @@
 Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 double offsetX=0, offsetY=0, offsetZ=0;
 double mX,mY,mZ;
+float headingDegrees;
 void startCompass(){
   if(!mag.begin())
   {
@@ -60,45 +61,46 @@ void calibrateCompass(){
 float getHeading(attitude currentAttitude){
   /* Get a new sensor event */
   sensors_event_t event;
-  mag.getEvent(&event);
-  mX = event.magnetic.x-offsetX;
-  mY = event.magnetic.y-offsetY;
-  mZ = event.magnetic.z-offsetZ;
-  /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
-  //Serial.print("X: "); Serial.print(mX); Serial.print("  ");
-  //Serial.print("Y: "); Serial.print(mY); Serial.print("  ");
-  //Serial.print("Z: "); Serial.print(mZ); Serial.print("  ");Serial.println("uT");
+  if(mag.getEvent(&event)){
+    mX = event.magnetic.x-offsetX;
+    mY = event.magnetic.y-offsetY;
+    mZ = event.magnetic.z-offsetZ;
+    /* Display the results (magnetic vector values are in micro-Tesla (uT)) */
+    //Serial.print("X: "); Serial.print(mX); Serial.print("  ");
+    //Serial.print("Y: "); Serial.print(mY); Serial.print("  ");
+    //Serial.print("Z: "); Serial.print(mZ); Serial.print("  ");Serial.println("uT");
 
 
-  //correct for tilt before calculating heading
-  //exact use of roll and pitch depends on the device orientation on the drone
-  float pitch = DegreestoRads(currentAttitude.pitch);
-  float roll = DegreestoRads(currentAttitude.roll);
-  float yHorizontal = mX * cos(pitch) + mY*sin(roll)*sin(pitch) - mZ * cos(roll)*sin(pitch);
-  float xHorizontal = mY * cos(roll) + mZ*sin(roll);
+    //correct for tilt before calculating heading
+    //exact use of roll and pitch depends on the device orientation on the drone
+    float pitch = DegreestoRads(currentAttitude.pitch);
+    float roll = DegreestoRads(currentAttitude.roll);
+    float yHorizontal = mX * cos(pitch) + mY*sin(roll)*sin(pitch) - mZ * cos(roll)*sin(pitch);
+    float xHorizontal = mY * cos(roll) + mZ*sin(roll);
 
-  // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
-  // Calculate heading when the magnetometer is level, then correct for signs of axis.
-  float heading = atan2(yHorizontal, xHorizontal);
+    // Hold the module so that Z is pointing 'up' and you can measure the heading with x&y
+    // Calculate heading when the magnetometer is level, then correct for signs of axis.
+    float heading = atan2(yHorizontal, xHorizontal);
 
-  // Once you have your heading, you must then add your 'Declination Angle', which is the 'Error' of the magnetic field in your location.
-  // Find yours here: http://www.magnetic-declination.com/
-  // Mine is: -13* 2' W, which is ~13 Degrees, or (which we need) 0.22 radians
-  // If you cannot find your Declination, comment out these two lines, your compass will be slightly off.
-  float declinationAngle = -0.003839;
-  heading += declinationAngle;
+    // Once you have your heading, you must then add your 'Declination Angle', which is the 'Error' of the magnetic field in your location.
+    // Find yours here: http://www.magnetic-declination.com/
+    // Mine is: -13* 2' W, which is ~13 Degrees, or (which we need) 0.22 radians
+    // If you cannot find your Declination, comment out these two lines, your compass will be slightly off.
+    float declinationAngle = -0.003839;
+    heading += declinationAngle;
 
-  // Correct for when signs are reversed.
-  if(heading < 0)
-    heading += 2*PI;
+    // Correct for when signs are reversed.
+    if(heading < 0)
+      heading += 2*PI;
 
-  // Check for wrap due to addition of declination.
-  if(heading > 2*PI)
-    heading -= 2*PI;
+    // Check for wrap due to addition of declination.
+    if(heading > 2*PI)
+      heading -= 2*PI;
 
-  // Convert radians to degrees for readability.
-  float headingDegrees = heading * 180/M_PI;
+    // Convert radians to degrees for readability.
+    headingDegrees = heading * 180/M_PI;
 
-  //Serial.print("Heading (degrees): "); Serial.println(headingDegrees);
+    //Serial.print("Heading (degrees): "); Serial.println(headingDegrees);
+  }
   return headingDegrees;
 }

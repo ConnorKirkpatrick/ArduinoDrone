@@ -82,48 +82,49 @@ void startGyro() {
 attitude getGyroData() {
   ///Grab the Adafruit acceleration values
   sensors_event_t a, g, temp;
-  mpu.getEvent(&a,&g,&temp);
+  if(mpu.getEvent(&a,&g,&temp)){
+    ///grab the raw sensor values
+    const int MPU_addr=0x68;
+    Wire.beginTransmission(MPU_addr);
+    Wire.write(0x3B);
+    Wire.endTransmission(false);
+    Wire.requestFrom(MPU_addr,6,true);
+    AcX=Wire.read()<<8|Wire.read();
+    AcY=Wire.read()<<8|Wire.read();
+    AcZ=Wire.read()<<8|Wire.read();
+    Wire.endTransmission();
+    //Serial.println(AcY);
+    currentAttitude.AccX = a.acceleration.x - PAccXOffset;
+    currentAttitude.AccY = a.acceleration.y - PAccYOffset;
+    currentAttitude.AccZ = a.acceleration.z - PAccZOffset;
 
-  ///grab the raw sensor values
-  const int MPU_addr=0x68;
-  Wire.beginTransmission(MPU_addr);
-  Wire.write(0x3B);
-  Wire.endTransmission(false);
-  Wire.requestFrom(MPU_addr,12,true);
-  AcX=Wire.read()<<8|Wire.read();
-  AcY=Wire.read()<<8|Wire.read();
-  AcZ=Wire.read()<<8|Wire.read();
-  //Serial.println(AcY);
-  currentAttitude.AccX = a.acceleration.x - PAccXOffset;
-  currentAttitude.AccY = a.acceleration.y - PAccYOffset;
-  currentAttitude.AccZ = a.acceleration.z - PAccZOffset;
-
-  currentAttitude.RAccX = g.gyro.x - RAccXOffset;
-  currentAttitude.RAccY = g.gyro.y - RAccYOffset;
-  currentAttitude.RAccZ = g.gyro.z - RAccZOffset;
+    currentAttitude.RAccX = g.gyro.x - RAccXOffset;
+    currentAttitude.RAccY = g.gyro.y - RAccYOffset;
+    currentAttitude.RAccZ = g.gyro.z - RAccZOffset;
 
 
-  xAng = map(AcX,minVal,maxVal,-90,90);
-  yAng = map(AcY,minVal,maxVal,-90,90);
-  zAng = map(AcZ,minVal,maxVal,-90,90);
-  x= (atan2(-yAng, -zAng)+PI);
-  y= (atan2(-xAng, -zAng)+PI);
-  z= (atan2(-yAng, -xAng)+PI);
-  ///x is roll
-  ///y is pitch
-  ///z is yaw
+    xAng = map(AcX,minVal,maxVal,-90,90);
+    yAng = map(AcY,minVal,maxVal,-90,90);
+    zAng = map(AcZ,minVal,maxVal,-90,90);
+    x= (atan2(-yAng, -zAng)+PI);
+    y= (atan2(-xAng, -zAng)+PI);
+    z= (atan2(-yAng, -xAng)+PI);
+    ///x is roll
+    ///y is pitch
+    ///z is yaw
 
-  y = y * -1; //*-1 as the sensor is inverted
+    y = y * -1; //*-1 as the sensor is inverted
 
-  x = x - rollOffset;
-  y = y - pitchOffset;
-  z = z - yawOffset;
-  ///Ensure that measurements are within the +- 1PI Radians range
-  if(x<-PI){ x = 2*PI + x;}
-  if(y<-PI){ y = 2*PI + y;}
-  currentAttitude.pitch = y;
-  currentAttitude.roll = x;
-  currentAttitude.yaw = z;
+    x = x - rollOffset;
+    y = y - pitchOffset;
+    z = z - yawOffset;
+    ///Ensure that measurements are within the +- 1PI Radians range
+    if(x<-PI){ x = 2*PI + x;}
+    if(y<-PI){ y = 2*PI + y;}
+    currentAttitude.pitch = y;
+    currentAttitude.roll = x;
+    currentAttitude.yaw = z;
+  }
   return currentAttitude;
 }
 
