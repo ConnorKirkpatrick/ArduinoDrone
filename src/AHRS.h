@@ -1,8 +1,8 @@
 //combine heading and attitude data to derive speed and velocity in a given direction
 //typically this is north-east-up, so we shall do the same
 
-#include "gyro.h"
-float northV, eastV, downV, altitude;
+float northV, eastV, upV, altitude, northA, eastA, upA;
+int lastPredict = 0;
 int deltaT = 0;
 int r_earth = 6378100;
 
@@ -14,16 +14,32 @@ double oldLatitude, oldLongitude;
 
 
 void updateAHRS(attitude attitude, float heading,int timeDelta){
-  //first we deal with the longitudinal component
-  northV += cos(heading) * cos(attitude.pitch) * attitude.AccX *timeDelta;
-  northV += sin(heading) * cos(attitude.roll) * attitude.AccY *timeDelta;
-  //then generate the lateral component
-  eastV += sin(heading) * cos(attitude.pitch) * attitude.AccX *timeDelta;
-  eastV += cos(heading) * cos(attitude.roll) * attitude.AccY *timeDelta;
-  //now the vertical components
-  downV = sin(attitude.pitch) * attitude.AccX * timeDelta;
-  downV = sin(attitude.roll) * attitude.AccY * timeDelta;
-  //these three calculations generate the total longitudinal, lateral and vertical motion of the drone
+    //first we deal with the longitudinal component
+    northV += cos(heading) * cos(attitude.pitch) * attitude.AccX *timeDelta;
+    northV += sin(heading) * cos(attitude.roll) * attitude.AccY *timeDelta;
+    northV += sin(attitude.pitch) * cos(heading) * attitude.AccZ * -1 * timeDelta;
+
+    //then generate the lateral component
+    eastV += sin(heading) * cos(attitude.pitch) * attitude.AccX *timeDelta;
+    eastV += cos(heading) * cos(attitude.roll) * attitude.AccY *timeDelta;
+    eastV += sin(attitude.pitch) * sin(heading) * attitude.AccZ * -1 * timeDelta;
+    //now the vertical components
+    upV += sin(attitude.pitch) * attitude.AccX * timeDelta;
+    upV += sin(attitude.roll) * attitude.AccY * timeDelta;
+    upV += cos(attitude.pitch) * attitude.AccZ * timeDelta;
+    //these three calculations generate the total longitudinal, lateral and vertical motion of the drone
+
+    northA = cos(heading) * cos(attitude.pitch) * attitude.AccX;
+    northA += sin(heading) * cos(attitude.roll) * attitude.AccY * -1;
+    northA += sin(heading) * sin(attitude.roll) * attitude.AccZ;
+
+    eastA = sin(heading) * cos(attitude.pitch) * attitude.AccX;
+    eastA += cos(heading) * cos(attitude.roll) * attitude.AccY;
+    eastA += sin(attitude.roll) * cos(heading) * attitude.AccZ;
+
+    upA = cos(heading) * sin(attitude.pitch) * attitude.AccZ;
+    upA += sin(attitude.roll) * cos(attitude.pitch) * attitude.AccY;
+    upA += cos(attitude.roll) * cos(attitude.pitch) * attitude.AccZ;
 }
 
 
@@ -35,7 +51,7 @@ double X [9] = { //STATE
 
         0, //northV
         0, //eastV
-        0, //downV
+        0, //upV
 
         0, //northAcc
         0, //eastAcc
@@ -44,15 +60,15 @@ double X [9] = { //STATE
 
 
 double F[9][9] = { //STATE TRANSITIONS
-        {1, 0, 0, X[0]  + (X[3] * deltaT / r_earth) * (180 / PI), 0, 0, 0.5* pow(deltaT,2), 0, 0}, //north position
-        {0,1,0,0,X[1] + (X[4] * deltaT / r_earth) * (180 / PI) / cos(X[0] * PI/180),0,0,0.5* pow(deltaT,2),0}, //east position
-        {0,0,1,0,0,X[2] + X[5] * deltaT,0,0,0.5* pow(deltaT,2)}, //altitude
-        {0,0,0,1,0,0,X[3] * deltaT,0,0}, //north velocity
-        {0,0,0,0,1,0,0,X[4] * deltaT,0}, //east velocity
-        {0,0,0,0,0,1,0,0,X[5] * deltaT},//vertical velocity
-        {0,0,0,0,0,0,1,0,0}, // north acceleration
-        {0,0,0,0,0,0,0,1,0}, // east acceleration
-        {0,0,0,0,0,0,0,0,1} // vertical acceleration
+        {1, 0, 0, X[0]  + (X[3] * deltaT / r_earth) * (180 / PI), 0, 0, 0, 0, 0}, //north position
+        {0,1,0,0,X[1] + (X[4] * deltaT / r_earth) * (180 / PI) / cos(X[0] * PI/180),0,0,0,0}, //east position
+        {0,0,1,0,0,X[2] + (X[5] * deltaT),0,0,0}, //altitude m
+        {0,0,0,1,0,0,X[3] * deltaT,0,0}, //north velocity m/s
+        {0,0,0,0,1,0,0,X[4] * deltaT,0}, //east velocity m/s
+        {0,0,0,0,0,1,0,0,X[5] * deltaT},//vertical velocity m/s
+        {0,0,0,0,0,0,1,0,0}, // north acceleration m/s/s
+        {0,0,0,0,0,0,0,1,0}, // east acceleration m/s/s
+        {0,0,0,0,0,0,0,0,1} // vertical acceleration m/s/s
 };
         //future state Xn+1 = FXn + GUn
 double U[3] = {
@@ -61,10 +77,20 @@ double U[3] = {
         0,
 };
 double P[9][9]; //covariance matrix
-double Q[9]; //system noise
-double W[9]; //process noise
-double H[9] = {1,1,1,1,1,1,1,1,1};
-double K[9]; //kalman gain
+double Q[9] = { //system noise
+        0,
+        0,
+        0.002,
+        0.001,
+        0.001,
+        0.001,
+        0.0005,
+        0.0005,
+        0.0005
+};
+double W[9] = {0.1,0.1,0.001,0.001,0.001,0.001,0.001,0.001,0.001}; //process noise
+double H[9] = {1,1,1,1,1,1,1,1,1}; // observation matrix
+double K[9] = {1,1,1,1,1,1,1,1,1}; //kalman gain
 double I[9][9] = { //this is a fixed identity matrix, it is an NxN grid with 1's down the diagonal
         {1,0,0,0,0,0,0,0,0,},
         {0,1,0,0,0,0,0,0,0},
@@ -78,34 +104,72 @@ double I[9][9] = { //this is a fixed identity matrix, it is an NxN grid with 1's
 
 };
 
-void predict(){
-    for(int i = 0; i< 9; i++){//for each state
-        double stateResult = 0;
-        for(int j = 0; j < 9; j++){//for each transition in the state
-            stateResult += X[i]*F[i][j]; //predict the new state based on the state transition
-            P[i][j] = F[i][j]*P[i][j]*F[j][i] + Q[i]; //predict the new covariance, F*P*inverted F + fixed error
-        }
-        X[i] = stateResult;
+void predict(int time){
+    deltaT = (time/1000) - lastPredict; // convert milliseconds to seconds
+    //for lat
+    X[0] = X[0] + (X[3] * deltaT / r_earth) * (180 / PI); // transition
+    P[0][0] += + Q[0] ; //covariance prediction
+    //for long
+    X[1] = X[1] + (X[4] * deltaT / r_earth) * (180 / PI) / cos(X[0] * PI/180);// transition
+    P[1][1] += + Q[1]; // covariance prediction
+    //for alt
+    X[2] = X[2] + X[5] * deltaT; //transition
+    P[2][2] += + Q[2];// covariance prediction
+    //for xV
+    X[3] = X[3] + X[6] * deltaT; // transition
+    P[3][3] += + Q[3];// covariance prediction
+    //for xY
+    X[4] = X[4] + X[7] * deltaT;
+    P[4][4] += Q[4];
+    //for xZ
+    X[5] = X[5] + X[8] * deltaT;
+    P[5][5] += Q[5];
+    //For Ax
+    //X[6] = X[6];
+    P[6][6] += Q[6];
+    //for Ay
+    P[7][7] += Q[7];
+    //for Az
+    P[8][8] += Q[8];
 
-    }
+
+    lastPredict = time/1000;
 }
 
-void update(double* update){
-    //first we apply the innovation step
+double sum(double *input){
+    double sum = 0;
     for(int i = 0; i < 9; i++){
-        for(int j = 0; j < 9; j++){
-            //first we update the kalman gains
-            K[i] = P[i][j] * H[j] / (H[i] * P[i][j] * H[j] + W[i]);
-            //check second step for inversion
-            //now update the covariance matrix
-            P[i][j] = (I[i][j] - K[i] * H[i]) * P[i][j] * (I[j][i] - K[j] * H[j]) + (K[i] * W[i] * K[j]);
-        }
-        //finally we update the estimate with the new measurement, step 2 and three can be performed in any order as they do not affect each other
-        X[i] = X[i] + K[i] * (update[i] - H[i]*X[i]); //for a given state, the new state is the old state + the kalman gain ( the measures state - the old state * the observation matrix (this matrix allows us to tune the bias towards the new value
-
+        sum += input[i];
     }
-    //next we update the covariance matrix
+    return sum;
 }
+
+void update(double *update){
+    //update gain
+    for(int i =0;i<9;i++){
+        K[i] = sum(P[i]) / sum(P[i]) + W[i];
+    }
+    //update the values
+    for(int j =0;j<9;j++){
+        X[j] = X[j] + K[j] * (update[j] - H[j]*X[j]);
+    }
+    //update cov
+    for(int i=0;i<9;i++){
+        for(int j=0;j<9;j++){
+            P[i][j] = (I[i][j]-K[i]*H[i]) * P[i][j] * (I[j][i]-K[j]*H[j]) + K[i] * W[i] *K[j];
+        }
+    }
+}
+
+void start(double* data){
+    for(int i = 0; i < 9; i++){
+        X[i] = data[i];
+    }
+    lastPredict = millis()/1000;
+    predict(millis());
+}
+
+
 
 
 /**
