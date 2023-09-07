@@ -8,11 +8,12 @@ void startCompass(){
   {
     /* There was a problem detecting the HMC5883 ... check your connections */
     Serial.println("No Compass detected ... Check your wiring!");
-    sendRadio("No Compass detected ... Check your wiring & detach power to retry");
+    //sendRadio("No Compass detected ... Check your wiring & detach power to retry");
     while(1);
   }
-  Serial.println("Compass Ready");
-  sendRadio("Compass Ready");
+  sendStatusMessage("Compass Ready",SEVERITY_INFO);
+  //Serial.println("Compass Ready");
+  //sendRadio("Compass Ready");
 }
 
 void calibrateCompass(){
