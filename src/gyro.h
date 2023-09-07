@@ -31,52 +31,54 @@ double DegreestoRads(double x){
 
 
 void startGyro() {
-  double offsetP=0, offsetR=0, offsetY=0; ///raw angle offsets
-  double offsetPX=0, offsetPY=0, offsetPZ=0; ///Positional acceleration offsets
-  double offsetRX=0, offsetRY=0, offsetRZ=0; ///angular acceleration offsets
-  if (!mpu.begin()) {
-    Serial.println("Failed to find MPU6050 chip");
-    sendRadio("Failed to start gyro, detach power and try again");
-    while(1){}
-  }
-  mpu.setAccelerometerRange(MPU6050_RANGE_4_G);
-  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-  mpu.setFilterBandwidth(MPU6050_BAND_184_HZ);
-  mpu.setCycleRate(MPU6050_CYCLE_40_HZ);
+    double offsetP=0, offsetR=0, offsetY=0; ///raw angle offsets
+    double offsetPX=0, offsetPY=0, offsetPZ=0; ///Positional acceleration offsets
+    double offsetRX=0, offsetRY=0, offsetRZ=0; ///angular acceleration offsets
+    if (!mpu.begin()) {
+        sendStatusMessage("Failed to find MPU6050 chip", SEVERITY_ERR);
+        /*
+        while(true){
 
-  Serial.println("Calibrating Gyro...");
-  sendRadio("Gyro calibrating...");
-  delay(5000); //pause to allow values to stabilise
-  for(int i = 0; i < offsetCycles; i++){
-    calibrationAttitude = getGyroData();
-    offsetP = offsetP + calibrationAttitude.pitch;
-    offsetR = offsetR + calibrationAttitude.roll;
-    offsetY = offsetY + calibrationAttitude.yaw;
+        }
+         */
+    }
+    mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
+    mpu.setGyroRange(MPU6050_RANGE_250_DEG);
+    mpu.setFilterBandwidth(MPU6050_BAND_184_HZ);
+    mpu.setCycleRate(MPU6050_CYCLE_20_HZ);
 
-    offsetPX = offsetPX + calibrationAttitude.AccX;
-    offsetPY = offsetPY + calibrationAttitude.AccY;
-    offsetPZ = offsetPZ + calibrationAttitude.AccZ;
+    sendStatusMessage("Calibrating Gyro",SEVERITY_INFO);
 
-    offsetRX = offsetRX + calibrationAttitude.RAccX;
-    offsetRY = offsetRY + calibrationAttitude.RAccY;
-    offsetRZ = offsetRZ + calibrationAttitude.RAccZ;
+    delay(3000); //pause to allow values to stabilise
+    for(int i = 0; i < offsetCycles; i++){
+        calibrationAttitude = getGyroData();
+        offsetP = offsetP + calibrationAttitude.pitch;
+        offsetR = offsetR + calibrationAttitude.roll;
+        offsetY = offsetY + calibrationAttitude.yaw;
 
-    delay(100);
-  }
+        offsetPX = offsetPX + calibrationAttitude.AccX;
+        offsetPY = offsetPY + calibrationAttitude.AccY;
+        offsetPZ = offsetPZ + calibrationAttitude.AccZ;
 
-  pitchOffset = offsetP/offsetCycles;
-  rollOffset = offsetR/offsetCycles;
-  yawOffset = offsetY/offsetCycles;
+        offsetRX = offsetRX + calibrationAttitude.RAccX;
+        offsetRY = offsetRY + calibrationAttitude.RAccY;
+        offsetRZ = offsetRZ + calibrationAttitude.RAccZ;
 
-  PAccXOffset = offsetPX/offsetCycles;
-  PAccYOffset = offsetPY/offsetCycles;
-  PAccZOffset = offsetPZ/offsetCycles;
+        delay(100);
+    }
 
-  RAccXOffset = offsetRX/offsetCycles;
-  RAccYOffset = offsetRY/offsetCycles;
-  RAccZOffset = offsetRZ/offsetCycles;
-  Serial.println("Gyro Ready");
-  sendRadio("Gyro Ready");
+    pitchOffset = offsetP/offsetCycles;
+    rollOffset = offsetR/offsetCycles;
+    yawOffset = offsetY/offsetCycles;
+
+    PAccXOffset = offsetPX/offsetCycles;
+    PAccYOffset = offsetPY/offsetCycles;
+    PAccZOffset = offsetPZ/offsetCycles;
+
+    RAccXOffset = offsetRX/offsetCycles;
+    RAccYOffset = offsetRY/offsetCycles;
+    RAccZOffset = offsetRZ/offsetCycles;
+    sendStatusMessage("Gyro Ready",SEVERITY_INFO);
 }
 
 attitude getGyroData() {
@@ -93,16 +95,19 @@ attitude getGyroData() {
     AcY=Wire.read()<<8|Wire.read();
     AcZ=Wire.read()<<8|Wire.read();
     Wire.endTransmission();
-    //Serial.println(AcY);
+
+    //acceleration is in m/s^2
     currentAttitude.AccX = a.acceleration.x - PAccXOffset;
     currentAttitude.AccY = a.acceleration.y - PAccYOffset;
     currentAttitude.AccZ = a.acceleration.z - PAccZOffset;
 
+    //angular rate is radians/s
     currentAttitude.RAccX = g.gyro.x - RAccXOffset;
     currentAttitude.RAccY = g.gyro.y - RAccYOffset;
     currentAttitude.RAccZ = g.gyro.z - RAccZOffset;
 
 
+    //raw orientation is in radians, from -1Pi to +1Pi
     xAng = map(AcX,minVal,maxVal,-90,90);
     yAng = map(AcY,minVal,maxVal,-90,90);
     zAng = map(AcZ,minVal,maxVal,-90,90);
@@ -124,7 +129,7 @@ attitude getGyroData() {
     currentAttitude.pitch = y;
     currentAttitude.roll = x;
     currentAttitude.yaw = z;
+
   }
   return currentAttitude;
 }
-
