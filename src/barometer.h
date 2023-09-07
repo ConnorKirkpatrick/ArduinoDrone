@@ -14,18 +14,21 @@ void startBMP(){
                   Adafruit_BMP280::FILTER_X16,      // Filtering
                   Adafruit_BMP280::STANDBY_MS_1);
   //sendRadio("Altimeter Ready");
-  Serial.println("Baro Ready");
+  sendStatusMessage("Altimeter ready",SEVERITY_INFO);
+  //Serial.println("Baro Ready");
 }
 
 float getAltitude(){
   if(bmp.takeForcedMeasurement()){
     //calculate alt based on baro pressure and temp
     h = ((pow(1013.25/bmp.readPressure(), 1/5257) -1) * (bmp.readTemperature())) / 0.0065; //using hysometric formula
-    Serial.print(bmp.readPressure());
+    /*Serial.print(bmp.readPressure());
     Serial.print("--");
     Serial.print(bmp.readTemperature());
     Serial.print("--");
-    Serial.println(bmp.getStatus(),BIN);
+    Serial.print(bmp.getStatus(),BIN);
+    Serial.print("--");
+    Serial.println(bmp.readAltitude());*/
     if(bmp.getStatus() == 0xF3){
       //On error, the device has swapped to the SPI interface, power off-reset to recover the device
       //the issue seems to be an interaction between different I2C devices, when run on its own it functions fine
